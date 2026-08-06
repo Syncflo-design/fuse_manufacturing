@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "creation": "2026-08-06 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "gateway_url",
+  "credentials_section",
+  "sender_id",
+  "sender_password",
+  "column_break_creds",
+  "company_id",
+  "user_id",
+  "user_password",
+  "entity_section",
+  "entity_id",
+  "defaults_section",
+  "default_item_group",
+  "tuning_section",
+  "page_size",
+  "timeout",
+  "column_break_tuning",
+  "max_attempts"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "description": "Master switch. When off, every gateway call raises instead of contacting Intacct."
+  },
+  {
+   "default": "https://api.intacct.com/ia/xml/xmlgw.phtml",
+   "fieldname": "gateway_url",
+   "fieldtype": "Data",
+   "label": "Gateway URL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "Credentials"
+  },
+  {
+   "fieldname": "sender_id",
+   "fieldtype": "Data",
+   "label": "Sender ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sender_password",
+   "fieldtype": "Password",
+   "label": "Sender Password",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_creds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company_id",
+   "fieldtype": "Data",
+   "label": "Company ID",
+   "reqd": 1,
+   "description": "One Intacct company per ERPNext site."
+  },
+  {
+   "fieldname": "user_id",
+   "fieldtype": "Data",
+   "label": "User ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "user_password",
+   "fieldtype": "Password",
+   "label": "User Password",
+   "reqd": 1
+  },
+  {
+   "fieldname": "entity_section",
+   "fieldtype": "Section Break",
+   "label": "Entity"
+  },
+  {
+   "fieldname": "entity_id",
+   "fieldtype": "Data",
+   "label": "Entity ID (locationid)",
+   "description": "Manufacturing transaction definitions are set to 'Entity only'. Without this the login is rejected with BL01001973."
+  },
+  {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "default": "Products",
+   "fieldname": "default_item_group",
+   "fieldtype": "Link",
+   "label": "Default Item Group",
+   "options": "Item Group",
+   "description": "Intacct has no item-group concept that maps onto ERPNext's, so every synced item lands here."
+  },
+  {
+   "fieldname": "tuning_section",
+   "fieldtype": "Section Break",
+   "label": "Tuning"
+  },
+  {
+   "default": "1000",
+   "fieldname": "page_size",
+   "fieldtype": "Int",
+   "label": "Query Page Size",
+   "description": "Intacct guidance is to keep queries under about 1000 records."
+  },
+  {
+   "fieldname": "column_break_tuning",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "300",
+   "fieldname": "timeout",
+   "fieldtype": "Int",
+   "label": "Request Timeout (seconds)"
+  },
+  {
+   "default": "3",
+   "fieldname": "max_attempts",
+   "fieldtype": "Int",
+   "label": "Max Attempts",
+   "description": "Transient failures only (timeout, empty response, 5xx, 429). A genuine rejection is never retried."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Intacct Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

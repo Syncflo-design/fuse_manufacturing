@@ -1,0 +1,102 @@
+# Architecture decision log — Fuse_Manufacturing
+
+Newest at the bottom. One entry per decision.
+
+Template:
+
+```
+## YYYY-MM-DD — <decision in one line>
+
+**Context:** what forced the choice
+**Decision:** what we're doing
+**Why:** the reasoning that would otherwise be lost
+**Alternatives rejected:** and why
+**Consequences:** what this locks in or makes harder
+```
+
+---
+
+## 2026-08-06 — Repo created as `C:\ClaudeCode\Fuse_Manufacturing`
+
+**Context:** "Fuse" already names the ASP.NET WebForms app at
+`\\Syncflo-desktop\f\Manifold\Intacct_Fusion Manufacturing`.
+**Decision:** The ERPNext build lives in `Fuse_Manufacturing` (Russell's choice, "for now" —
+treat as provisional).
+**Consequences:** The Frappe app name cannot carry capitals — it will be `fuse_manufacturing`
+at `bench new-app` time, so folder and app name won't match exactly. Decide before scaffolding
+whether to rename the folder to match.
+
+## 2026-08-06 — ERPNext replaces the WebForms Fuse; this is NOT a cutover
+
+**Context:** Fuse works and is proven against a live Intacct company, but everything it
+hand-builds (works orders, BOM explosion, backflush, WIP) ERPNext ships as standard.
+**Decision:** Retire Fuse. Rebuild on ERPNext. Fuse is the **requirements document, not the
+template** — port intent, never screens.
+**Why:** Fuse has only ever run in a dev environment. **Nothing is live: no data to migrate,
+nobody to retrain.** That is exactly why the switch happens now rather than later.
+**Consequences:** No migration workstream, no parallel run, no rollback plan needed. Where
+ERPNext does something natively, use ERPNext — Fuse's version is an SBMS workaround.
+Its .NET SDK transport does not port; the gateway approach does.
+
+## 2026-08-06 — XML gateway, not REST
+
+**Decision:** Post XML to `https://api.intacct.com/ia/xml/xmlgw.phtml`.
+**Why:** REST forces every customer through app registration in the Sage developer portal.
+The XML gateway needs only a sender ID plus company credentials — which is what makes this
+a product rather than a per-customer install.
+**Consequences:** We own the envelope. All gateway constraints in `02-intacct-integration.md`
+apply — entity-only login, `RECORDNO` paging, concurrency limits, exact UOM strings.
+
+## 2026-08-06 — Python inside Frappe, no middleware
+
+**Decision:** Python/`requests` inside the Frappe app. No .NET middleware, no proxy service.
+**Why:** Errors surface in the request that caused them; retries and scheduling come free
+from Frappe's queue; per-client config lives in DocTypes.
+**Alternatives rejected:** A .NET service — it would add a deployment, a log to check, and a
+place for failures to hide.
+
+## 2026-08-06 — Intacct posts first, always
+
+**Decision:** If Intacct rejects the post, the ERPNext transaction does not stand. ERPNext
+never invents a value; it records the cost Intacct accepted. Live, never batched.
+**Why:** Any local-only outcome creates a divergence someone has to reconcile by hand, which
+is precisely the failure mode the product exists to remove.
+**Consequences:** Every ERPNext submit that has a financial consequence is gated on a
+synchronous gateway call. The **"On failure"** column of the workflow document is therefore
+the column that decides the build.
+
+## 2026-08-06 — Theme lives in its own Frappe app
+
+**Decision:** Intacct visual language ships as a separate app from the integration app.
+**Why:** Not every client wants the Intacct look, and cosmetic changes must not force an
+integration release.
+**Consequences:** Style only — colour, typography, density, nav, buttons. **Do not restructure
+form layouts** to mimic Intacct screens; that fights the framework every release.
+Precedent app: `nest_theme`.
+
+## 2026-08-06 — Exactly two custom apps
+
+**Decision:** Two Frappe apps, no more.
+
+1. **`fuse_theme`** — Intacct visual language only. Colour, typography, density, nav, button
+   treatment. Precedent: `nest_theme`.
+2. **`fuse_manufacturing`** — everything else: the Intacct XML gateway client, masters mirror,
+   postings, custom DocTypes, per-client config, roles and permissions, mobile scanner flows,
+   and all code that would otherwise be hand-entered on a site.
+
+**Why:** the theme releases on a cosmetic cadence and not every client wants the Intacct look;
+the integration app releases on a correctness cadence. Keeping them apart means a colour tweak
+never triggers an integration release, and vice versa.
+
+**Consequences — the thing to hold the line on:** anything typed into a *site* rather than
+committed to the app (Server Scripts, Client Scripts, Property Setters, Custom Fields, Role
+Permission Manager changes) is invisible to git, does not deploy, and is lost on a rebuild.
+Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
+Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
+
+## 2026-08-06 — 1 client = 1 ERPNext instance = 1 Intacct company
+
+**Decision:** One credential set per instance. Company → entity (`locationid`) → location.
+Entity ID stored against each ERPNext Company, sent as `<locationid>` on every login.
+**Why:** Manufacturing transaction definitions are "Entity only"; a top-level session is
+rejected with BL01001973.
