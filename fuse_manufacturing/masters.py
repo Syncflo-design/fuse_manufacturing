@@ -393,7 +393,17 @@ def sync_items(modified_since=None):
 
 		doc.item_name = (val(row, "NAME") or item_code)[:140]
 		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
-		doc.is_stock_item = 1 if (val(row, "ITEMTYPE") or "").lower() == "inventory" else 0
+
+		# Intacct's ITEMTYPE decides whether ERPNext holds stock for the item.
+		# "Inventory" is obvious. A **Stockable Kit** also holds stock — it is a kit that
+		# is itself stocked — and it MUST be a stock item here, because ERPNext cannot
+		# run a Work Order to produce a non-stock item. Getting this wrong is silent:
+		# the BOM builds fine and only manufacturing fails, much later.
+		# A plain (non-stocked) "Kit" is assembled on the fly and holds no stock.
+		item_type = (val(row, "ITEMTYPE") or "").strip()
+		normalised = item_type.lower()
+		doc.is_stock_item = 1 if (normalised == "inventory" or "stockable kit" in normalised) else 0
+		doc.custom_intacct_item_type = item_type
 		if uom:
 			doc.stock_uom = uom
 		# Tracking switches are authoritative from Intacct, never set locally.

@@ -34,6 +34,14 @@ CUSTOM_FIELDS = {
 			"read_only": 1,
 		},
 		{
+			"fieldname": "custom_intacct_item_type",
+			"fieldtype": "Data",
+			"label": "Intacct Item Type",
+			"insert_after": "custom_intacct_recordno",
+			"read_only": 1,
+			"description": "Raw ITEMTYPE from Intacct. Drives is_stock_item — Inventory and Stockable Kit hold stock, a plain Kit does not.",
+		},
+		{
 			"fieldname": "custom_intacct_bin_tracked",
 			"fieldtype": "Check",
 			"label": "Intacct Bin Tracked",
