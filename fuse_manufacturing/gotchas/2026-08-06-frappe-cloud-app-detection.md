@@ -13,9 +13,18 @@ were too, and it landed on `gotchas`.
 and anything else move inside it. Files at the root (`README.md`, `pyproject.toml`,
 `CLAUDE.md`) are fine; hidden directories (`.claude/`, `.git/`) are ignored.
 
+**`patches.txt` is effectively required.** Both apps failed with
+`... does not exist inside <app>/<app> directory` while `hooks.py` was present and
+committed, and both passed once an empty `patches.txt` was added beside it. Ship one
+in every app from the start:
+
+```
+[pre_model_sync]
+
+[post_model_sync]
+```
+
 **Related, hit in the same session:**
-- `Not a valid Frappe App! ... does not exist inside <app>/<app> directory` with only
-  one root directory means what it says — add `patches.txt` or check `hooks.py` is committed.
 - `Could not find compatible Frappe version in pyproject.toml file` — declare it:
   ```toml
   [tool.bench.frappe-dependencies]
