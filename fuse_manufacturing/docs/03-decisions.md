@@ -94,6 +94,57 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-06 — Perpetual inventory OFF: ERPNext tracks quantity, Intacct holds value
+
+**Context:** the Leadertread company was created with `enable_perpetual_inventory = 1`
+and valuation FIFO. That makes ERPNext write its own GL entries — Stock In Hand, Stock
+Adjustment, COGS — at its own FIFO valuation, while Intacct values the same stock on
+average cost and holds the real books.
+
+**Decision:** turn perpetual inventory **off**, per company. ERPNext tracks quantities;
+Intacct holds value. Set on Leader Rubber Company 2026-08-06, and the default for every
+new client instance.
+
+**Why:** two systems both valuing the same stock will diverge — not might, will, because
+FIFO and average cost are different methods answering the same question. Someone opens a
+stock value report, sees a number that disagrees with the accounts, and now nobody trusts
+either. Reconciling that is precisely the manual work this product exists to remove.
+
+**Alternatives rejected:** mirror the chart of accounts and treat ERPNext's ledger as an
+unofficial shadow — the shadow still gets read, and still gets believed. Reconciling the
+two — that is the failure mode, not the fix.
+
+**Consequences:**
+- ERPNext stock **value** reports go blank. Quantity reports are unaffected.
+- Do this **before any stock movement exists.** ERPNext will not let the flag be toggled
+  once stock ledger entries are on the books.
+- The chart of accounts (Intacct → ERPNext) becomes a later question, needed only if
+  ERPNext ever has to report on value rather than quantity. Reversible by design.
+
+## 2026-08-06 — Intacct is the golden source for locations; ERPNext mirrors its grain
+
+**Context:** ERPNext's Warehouse is a nested tree, so Location → Warehouse → Zone → Aisle
+→ Bin could all be Warehouse nodes with stock tracked at the leaf — finer than Intacct,
+which holds stock per warehouse with bin as line detail.
+
+**Decision:** Do **not** do that. Mirror Intacct's grain exactly:
+- One ERPNext Warehouse per Intacct WAREHOUSE.
+- Bins mirrored into an `Intacct Bin` DocType, read-only, one row per Intacct bin.
+- No warehouse, bin or location is created or edited in ERPNext. They are managed in
+  Intacct and synced down.
+
+**Why:** a finer-grained ERPNext picture would disagree with Intacct the moment anything
+moved, and reconciling two different grains is exactly the manual work this product
+exists to remove. Less granular and identical beats more granular and divergent.
+
+**Consequences:**
+- The bin mirror deletes rows that no longer exist in Intacct. It is a mirror, not an archive.
+- Preventing manual creation is a **permissions** job, not code: the Stock Controller
+  role gets read-only on Warehouse. Do not write a guard hook for it — ERPNext itself
+  creates warehouses during company setup and a blanket block would fight that.
+- If bin-level stock visibility is ever genuinely needed, it is a new conversation, not
+  a quiet change of grain.
+
 ## 2026-08-06 — Generic Intacct methods first; custom definitions are a last resort
 
 **Decision:** Use Intacct's own transaction definitions and standard functions wherever

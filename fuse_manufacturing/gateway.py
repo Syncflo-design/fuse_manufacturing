@@ -265,6 +265,43 @@ def query(object_name, fields, filter_xml=None, page_size=None, entity_id=None, 
 	return rows
 
 
+@frappe.whitelist()
+def lookup(object_name, company=None):
+	"""Read an Intacct object's schema — its fields and their types.
+
+	Design-time only, never a data path. This is how you find out what an object
+	actually carries instead of guessing field names and getting a rejection back.
+	"""
+	cfg = settings()
+	_require_enabled(cfg)
+	session_id = login(company=company)
+
+	request, content = _request_with_session(cfg, session_id)
+	function = ET.SubElement(content, "function", {"controlid": str(uuid.uuid4())})
+	lookup_el = ET.SubElement(function, "lookup")
+	ET.SubElement(lookup_el, "object").text = object_name
+
+	root = _check_result(_post(cfg, request))
+	return {
+		"fields": [
+			{
+				"id": field.findtext("ID"),
+				"label": field.findtext("LABEL"),
+				"type": field.findtext("DATATYPE"),
+			}
+			for field in root.iter("Field")
+		],
+		"relationships": [
+			{
+				"object": rel.findtext("OBJECTNAME"),
+				"label": rel.findtext("LABEL"),
+				"path": rel.findtext("RELATEDBY"),
+			}
+			for rel in root.iter("Relationship")
+		],
+	}
+
+
 def execute(function_element, entity_id=None, company=None):
 	"""Post one write function (create/update/delete) and return the affected key.
 

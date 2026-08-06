@@ -121,16 +121,20 @@ BIN_FIELDS = ["RECORDNO", "BINID", "WAREHOUSEID", "STATUS"]
 
 @frappe.whitelist()
 def sync_bins(company=None):
-	"""Intacct BIN → the default bin stored on each ERPNext Warehouse.
+	"""Intacct BIN → Intacct Bin records, one per bin. A mirror, nothing more.
 
-	ERPNext has no location-bin concept — its own "Bin" DocType is the per-item,
-	per-warehouse quantity record, which is a different thing entirely. Intacct bins are
-	not modelled as ERPNext records; the warehouse's default bin is stored against the
-	Warehouse and stamped onto movements at post time, which is all a bin-enabled item
-	needs to be accepted.
+	Bins are NOT modelled as ERPNext warehouses. ERPNext's Warehouse tree could hold
+	them as leaf nodes, which would track stock per bin — finer than Intacct, which
+	holds stock per warehouse with bin as line detail. Deliberately not done: Intacct is
+	the golden source for locations, so ERPNext mirrors its grain rather than inventing
+	a more detailed one that would then disagree.
 
-	"Default" is the lowest BINID, matching the donor, so the choice is deterministic
-	rather than dependent on the order Intacct happens to return.
+	ERPNext's own "Bin" DocType is unrelated — it is the per-item, per-warehouse
+	quantity record. Hence a separate Intacct Bin DocType.
+
+	The lowest active BINID is also stamped on the Warehouse as its default, for
+	movements where the operator does not pick one. Lowest, not first returned, so the
+	choice does not depend on the order Intacct happens to answer in.
 	"""
 	result = {}
 
@@ -138,15 +142,49 @@ def sync_bins(company=None):
 		rows = gateway.query("BIN", BIN_FIELDS, company=comp)
 
 		lowest = {}
+		mirrored = 0
+		seen = set()
+
 		for row in rows:
-			if (val(row, "STATUS") or "active").lower() != "active":
-				continue
 			warehouse_id = val(row, "WAREHOUSEID")
 			bin_id = val(row, "BINID")
 			if not warehouse_id or not bin_id:
 				continue
-			if warehouse_id not in lowest or bin_id < lowest[warehouse_id]:
+
+			warehouse = frappe.db.get_value(
+				"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": comp}, "name"
+			)
+			if not warehouse:
+				# Warehouse not mirrored yet — sync_warehouses runs first for a reason.
+				continue
+
+			status = (val(row, "STATUS") or "active").lower()
+			name = f"{warehouse}::{bin_id}"
+
+			if frappe.db.exists("Intacct Bin", name):
+				doc = frappe.get_doc("Intacct Bin", name)
+			else:
+				doc = frappe.new_doc("Intacct Bin")
+				doc.warehouse = warehouse
+				doc.bin_id = bin_id
+
+			doc.company = comp
+			doc.status = status
+			doc.intacct_recordno = val(row, "RECORDNO")
+			doc.save(ignore_permissions=True)
+			mirrored += 1
+			seen.add(name)
+
+			if status == "active" and (warehouse_id not in lowest or bin_id < lowest[warehouse_id]):
 				lowest[warehouse_id] = bin_id
+
+		# Bins deleted in Intacct must not linger here — this is a mirror, not an archive.
+		stale = frappe.get_all("Intacct Bin", filters={"company": comp}, pluck="name")
+		removed = 0
+		for name in stale:
+			if name not in seen:
+				frappe.delete_doc("Intacct Bin", name, ignore_permissions=True, force=True)
+				removed += 1
 
 		stamped = 0
 		for warehouse_id, bin_id in lowest.items():
@@ -158,7 +196,13 @@ def sync_bins(company=None):
 			frappe.db.set_value("Warehouse", name, "custom_intacct_default_bin", bin_id, update_modified=False)
 			stamped += 1
 
-		result[comp] = {"read": len(rows), "warehouses_with_bins": len(lowest), "stamped": stamped}
+		result[comp] = {
+			"read": len(rows),
+			"mirrored": mirrored,
+			"removed": removed,
+			"warehouses_with_bins": len(lowest),
+			"default_bin_stamped": stamped,
+		}
 
 	frappe.db.commit()
 	return result
