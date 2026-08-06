@@ -455,6 +455,150 @@ def sync_items(modified_since=None):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Stock on hand — opening balance once, drift report thereafter
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ITEMWAREHOUSEINFO is the only place Intacct exposes item cost to the API. It is not
+# on the ITEM object at all, so cost arrives here, per warehouse, or not at all.
+STOCK_FIELDS = ["ITEMID", "WAREHOUSEID", "WONHAND", "AVERAGE_COST", "LAST_COST"]
+
+
+def _read_intacct_stock(company):
+	"""Intacct's on-hand per item/warehouse, keyed to ERPNext names."""
+	rows = gateway.query("ITEMWAREHOUSEINFO", STOCK_FIELDS, company=company)
+
+	warehouses = {
+		w.custom_intacct_warehouse_id: w.name
+		for w in frappe.get_all(
+			"Warehouse",
+			fields=["name", "custom_intacct_warehouse_id"],
+			filters={"company": company, "custom_intacct_warehouse_id": ["is", "set"]},
+		)
+	}
+
+	balances = {}
+	for row in rows:
+		item_code = val(row, "ITEMID")
+		warehouse = warehouses.get(val(row, "WAREHOUSEID"))
+		if not item_code or not warehouse:
+			continue
+		balances[(item_code, warehouse)] = {
+			"qty": number(row, "WONHAND", 0) or 0,
+			"rate": number(row, "AVERAGE_COST", 0) or 0,
+		}
+	return balances
+
+
+@frappe.whitelist()
+def post_opening_stock(company=None):
+	"""Post Intacct's on-hand into ERPNext ONCE, as an opening Stock Reconciliation.
+
+	Deliberately a one-off. From here ERPNext maintains its own quantities from the
+	movements it posts, and `stock_drift_report` is how disagreement gets noticed.
+	Re-reading Intacct on a schedule and silently correcting would hide the very bugs
+	that cause drift, and could overwrite a movement that has not posted yet.
+
+	Refuses to run if any stock movement already exists — that is what makes it
+	once-only rather than merely intended to be.
+
+	Valuation comes from Intacct's AVERAGE_COST, never invented locally.
+	"""
+	company = company or _target_companies()[0]
+
+	if frappe.db.exists("Stock Ledger Entry", {"company": company}):
+		frappe.throw(
+			f"{company} already has stock movements. Opening stock is a once-only "
+			"operation — use stock_drift_report to compare against Intacct instead."
+		)
+
+	balances = _read_intacct_stock(company)
+
+	doc = frappe.new_doc("Stock Reconciliation")
+	doc.company = company
+	doc.purpose = "Opening Stock"
+
+	skipped = []
+	posted = 0
+
+	for (item_code, warehouse), balance in sorted(balances.items()):
+		if balance["qty"] <= 0:
+			continue
+		if not frappe.db.exists("Item", item_code):
+			skipped.append({"item": item_code, "reason": "item not synced"})
+			continue
+
+		item = frappe.db.get_value(
+			"Item", item_code, ["is_stock_item", "has_batch_no", "has_serial_no"], as_dict=True
+		)
+		if not item.is_stock_item:
+			continue
+		if item.has_batch_no or item.has_serial_no:
+			# A tracked item needs its batch or serial identities, which Intacct holds
+			# per lot rather than as a warehouse total. Opening those blind would invent
+			# tracking data, so they are reported and left for a deliberate decision.
+			skipped.append({"item": item_code, "warehouse": warehouse, "reason": "batch or serial tracked"})
+			continue
+
+		doc.append(
+			"items",
+			{
+				"item_code": item_code,
+				"warehouse": warehouse,
+				"qty": balance["qty"],
+				"valuation_rate": balance["rate"],
+			},
+		)
+		posted += 1
+
+	if not posted:
+		return {"posted": 0, "skipped": skipped, "note": "Nothing to open."}
+
+	doc.insert(ignore_permissions=True)
+	doc.submit()
+	frappe.db.commit()
+
+	return {"stock_reconciliation": doc.name, "posted": posted, "skipped": skipped}
+
+
+@frappe.whitelist()
+def stock_drift_report(company=None):
+	"""Compare ERPNext's on-hand against Intacct's. Read-only — corrects nothing.
+
+	Drift means something is wrong: a movement that failed to post, a manual change,
+	or a bug. The point is to see it, not to paper over it.
+	"""
+	company = company or _target_companies()[0]
+	intacct = _read_intacct_stock(company)
+
+	erp = {}
+	for row in frappe.get_all(
+		"Bin",
+		fields=["item_code", "warehouse", "actual_qty"],
+		filters={"warehouse": ["in", [w for (_, w) in intacct]]} if intacct else {},
+	):
+		erp[(row.item_code, row.warehouse)] = row.actual_qty
+
+	drift = []
+	for key in set(intacct) | set(erp):
+		item_code, warehouse = key
+		intacct_qty = intacct.get(key, {}).get("qty", 0)
+		erp_qty = erp.get(key, 0)
+		if abs(intacct_qty - erp_qty) > 0.0001:
+			drift.append(
+				{
+					"item": item_code,
+					"warehouse": warehouse,
+					"intacct": intacct_qty,
+					"erpnext": erp_qty,
+					"difference": erp_qty - intacct_qty,
+				}
+			)
+
+	drift.sort(key=lambda d: abs(d["difference"]), reverse=True)
+	return {"company": company, "compared": len(set(intacct) | set(erp)), "drift": drift}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Kits → BOMs
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -585,8 +729,15 @@ def _build_bom(kit_code, lines, company):
 
 	signature = _recipe_signature(lines)
 
+	# Only ever touch a BOM this sync created. Leadertread needs alternative BOMs for
+	# raw-material substitution, and those are built by hand in ERPNext — Intacct has
+	# no way to express a second recipe. Matching on "the active BOM for this item"
+	# would find a substitution BOM and cancel it, silently destroying someone's work.
+	# The Intacct signature is what marks a BOM as ours.
 	existing = frappe.db.get_value(
-		"BOM", {"item": kit_code, "docstatus": 1, "is_active": 1}, ["name", "custom_intacct_signature"]
+		"BOM",
+		{"item": kit_code, "docstatus": 1, "custom_intacct_signature": ["is", "set"]},
+		["name", "custom_intacct_signature", "is_default"],
 	)
 	if existing and existing[1] == signature:
 		return "unchanged"
@@ -596,6 +747,10 @@ def _build_bom(kit_code, lines, company):
 	doc.company = company
 	doc.quantity = 1
 	doc.is_active = 1
+	# The Intacct recipe is ALWAYS the default. Substitution BOMs exist for when a raw
+	# material is unavailable, and are chosen deliberately on the Work Order — they are
+	# the exception, not the standing recipe. So a sync always restores Intacct's as
+	# default, even if a substitution was made default in the meantime.
 	doc.is_default = 1
 	doc.with_operations = 0
 	# Valuation Rate resolves to zero here by design — perpetual inventory is off and
@@ -604,7 +759,11 @@ def _build_bom(kit_code, lines, company):
 	doc.custom_intacct_signature = signature
 
 	for line in lines:
-		row = {"item_code": line["item_code"], "qty": line["qty"]}
+		# Substitution is gated by the Item Alternative list, not by this flag: with no
+		# approved pairing for a component, allowing alternatives on the line changes
+		# nothing. So set it everywhere and let the approved-pairings list be the
+		# control — one list to maintain instead of a flag per BOM line.
+		row = {"item_code": line["item_code"], "qty": line["qty"], "allow_alternative_item": 1}
 		if line["uom"]:
 			row["uom"] = line["uom"]
 		doc.append("items", row)

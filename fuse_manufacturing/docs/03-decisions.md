@@ -94,6 +94,97 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-06 — Substitution via Item Alternative, approved per pairing
+
+**Context:** Leadertread substitutes a raw material when one is unavailable, and a
+substitution must be approved by someone rather than chosen freely on the floor.
+
+**Decision:** Use ERPNext's **Item Alternative**, not alternative BOMs. Approval is at
+the **pairing** level — "Y may stand in for X" is approved once and then reused — not per
+individual swap.
+
+**Why not alternative BOMs:** they are combinatorial. A component with two substitutes
+appearing in ten kits means a matrix of near-identical BOMs, every one needing to stay in
+step each time Intacct changes a recipe. Item Alternative is one statement, maintained
+once, reused by every BOM containing that item. Reserve alternative BOMs for a genuinely
+different recipe — different quantities or process — not "we ran out".
+
+**Consequences:**
+- Synced BOM lines carry `allow_alternative_item = 1`. The **approved pairing list is the
+  control**, not the line flag: with no Item Alternative for a component, the flag does
+  nothing. One list to maintain instead of a flag per line.
+- Item Alternative permissions were tightened on 2026-08-06: **Stock User and Stock
+  Controller are read-only**; Stock Manager and Item Manager may create. ERPNext ships
+  Stock User with full create rights, which would have let the storeman approve their own
+  substitutions.
+- Adding one Custom DocPerm replaces the standard permission set for that doctype
+  entirely, so all four roles had to be restated. Do not add a single row and assume the
+  rest survive.
+- The pairing list lives in **ERPNext only**. Intacct's `ITEM.SUBSTITUTEID` exists but
+  holds a **single** substitute per item, where Item Alternative is many-to-many and can
+  be two-way. Syncing it was considered and rejected: anything beyond one substitute
+  would have to live in ERPNext anyway, so it would mean maintaining the list twice.
+  Treat `SUBSTITUTEID` as information, not as the source. `ITEMCOMPONENT` has no
+  alternatives flag at all.
+- Approval sits with operations, not accounting, which is the other reason the list
+  belongs on this side.
+- Per-swap approval was considered and deferred. It needs a Workflow on the Stock Entry
+  and a queue someone watches on the floor; revisit only if pairing-level proves too loose.
+
+## 2026-08-06 — Alternative BOMs are allowed; postings follow actual consumption
+
+**Context:** Leadertread substitutes raw materials when one is unavailable, so they need
+more than one BOM per finished good. Intacct cannot express that — `ITEMCOMPONENT` holds
+exactly one flat recipe per kit.
+
+**Decision:** ERPNext may hold as many BOMs per item as the plant needs. The sync
+maintains **only** the Intacct-sourced one and never touches the others.
+
+**Why this is safe:** postings send a Manufacturing Increase / Decrease **per item, from
+what was actually consumed**, not from the planned recipe. Intacct therefore never needs
+to know which BOM was used — it only ever sees real movements. The recipe is an ERPNext
+planning concern; the movements are the shared truth.
+
+**Consequences:**
+- A sync-managed BOM is identified by its `custom_intacct_signature`. Matching on "the
+  active BOM for this item" would find a hand-built substitution BOM and cancel it,
+  destroying someone's work silently. Never match that way.
+- **The Intacct BOM is always the default.** Substitution BOMs are for when a material
+  is unavailable and are chosen deliberately on the Work Order — the exception, not the
+  standing recipe. Every sync restores Intacct's as default, even if a substitution was
+  made default in the meantime.
+- **Do not lock down BOM permissions** for the Stock Controller. An earlier reading —
+  "Intacct is the golden source for recipes, so make BOM read-only" — is wrong for this
+  client. Substitution is a real operational need.
+- Because consumption drives the posting, a substitution reaches Intacct correctly with
+  no extra work: the component that was actually used is the one that decrements.
+
+## 2026-08-06 — Opening stock once, then a drift report — never a continuous mirror
+
+**Context:** ERPNext starts with no stock. Intacct holds the on-hand
+(`ITEMWAREHOUSEINFO.WONHAND`, with `AVERAGE_COST` — the only place the API exposes item
+cost at all).
+
+**Decision:** Read Intacct's on-hand **once** at go-live and post it as an opening Stock
+Reconciliation. After that ERPNext maintains its own quantities from the movements it
+posts. A read-only `stock_drift_report` compares the two on demand.
+
+**Alternatives rejected:** re-reading Intacct on a schedule and correcting ERPNext to
+match. It hides the bugs that cause drift instead of surfacing them, and it can
+overwrite a movement that has not posted yet.
+
+**Why it holds:** quantities stay in step precisely *because* every movement posts both
+ways. If they stop agreeing, that is a fault to find, not a number to overwrite.
+
+**Consequences:**
+- `post_opening_stock` refuses to run once any stock movement exists — once-only in
+  fact, not just in intention.
+- Valuation on the opening entry comes from Intacct's `AVERAGE_COST`. ERPNext never
+  invents a value.
+- **Batch and serial tracked items are skipped and reported.** Intacct holds those per
+  lot, not as a warehouse total, so opening them blind would invent tracking data.
+  They need a deliberate decision before go-live.
+
 ## 2026-08-06 — "Home" always means the user's Fuse landing page, never the desk
 
 **Decision:** The breadcrumb house, `/app`, and post-login all land on the user's Fuse
