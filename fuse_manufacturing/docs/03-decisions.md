@@ -94,6 +94,51 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-06 — "Home" always means the user's Fuse landing page, never the desk
+
+**Decision:** The breadcrumb house, `/app`, and post-login all land on the user's Fuse
+home page. Set via `home_page = "fuse-home"` in `fuse_theme`, with `role_home_page` kept
+for per-role overrides. Applies project-wide, not just to Stock Controller.
+
+**Why:** this is a single-product site. Dropping someone on the generic desk workspace
+list makes them navigate out of somewhere they never asked to be.
+
+**Consequences:**
+- `role_home_page` cannot carry the general case — Frappe matches **one** role, so a
+  user holding several gets whichever resolves first. That is why the app-wide
+  `home_page` does the work and `role_home_page` is only for genuine exceptions.
+- Any new landing page for another role is a `role_home_page` entry, not a new mechanism.
+- The Page's own `roles` list must include any role expected to land there, or they
+  land on a page they cannot open.
+
+## 2026-08-06 — Kits become BOMs; the multi-level cascade is ERPNext's, not Intacct's
+
+**Context:** Intacct has no BOM and no recipe-style production recording. Its only
+recipe structure is `ITEMCOMPONENT` — flat, single-level, 17 fields. A kit IS the
+finished good.
+
+**Decision:** Mirror kits into ERPNext BOMs, built in **dependency order** so a
+sub-assembly's BOM exists before any BOM that consumes it. ERPNext then explodes the
+sub-assembly rather than treating it as a raw part, and the cascade emerges from a set
+of flat Intacct kits.
+
+**Why:** cascading BOMs and true sub-assemblies are a real gain for Leadertread and are
+a large part of what makes ERPNext worth the switch. Verified on this site
+(2026-08-06) that a BOM with zero valuation both saves and submits, which is what makes
+this workable with perpetual inventory off.
+
+**Consequences:**
+- **Every level of the cascade posts its own movements to Intacct.** A sub-assembly is
+  really produced and really consumed, so it becomes stock at its level.
+- Therefore each intermediate that holds value in a warehouse **must exist as an Intacct
+  item** — the rule from the handoff, now with teeth. How deep the cascade goes is a
+  decision about how much intermediate stock Leadertread wants to hold and count.
+- BOMs are rebuilt only when the recipe signature changes. Cancel-and-replace is the
+  only way to change a submitted BOM, so an unconditional rebuild would churn the entire
+  BOM history on every run.
+- Circular recipes are reported and skipped. Intacct permits saving one; ERPNext cannot
+  explode it.
+
 ## 2026-08-06 — Perpetual inventory OFF: ERPNext tracks quantity, Intacct holds value
 
 **Context:** the Leadertread company was created with `enable_perpetual_inventory = 1`

@@ -7,6 +7,12 @@ app_license     = "MIT"
 
 after_install = "fuse_manufacturing.install.after_install"
 
+# Custom fields have to be re-applied on every migrate, not only at install. A field
+# added in a later release is otherwise never created on a site that already has the
+# app, and the first sync that uses it fails on an unknown column.
+# create_custom_fields is idempotent, so running it each migrate costs nothing.
+after_migrate = "fuse_manufacturing.install.after_install"
+
 # Masters are a one-way mirror, so the only question is how stale we tolerate them being.
 # Items move (new codes, renames, tracking flags) — hourly, incremental.
 # Warehouses, UOMs and bins are configuration someone changes deliberately — daily is
