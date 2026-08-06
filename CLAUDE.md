@@ -1,6 +1,7 @@
 # Fuse_Manufacturing — ERPNext operational layer over Sage Intacct
 
-Auto-loaded for every session in this folder. Read this first, then `docs/03-decisions.md`.
+Auto-loaded for every session in this folder. Read this first, then
+`fuse_manufacturing/docs/03-decisions.md`.
 Root `C:\ClaudeCode\CLAUDE.md` and `CoWork_Helper/CLAUDE.md` still apply on top.
 
 ## What we are building
@@ -119,10 +120,17 @@ and those flows are already proven with the client's people.
 
 ## Layout
 
-- `docs/` — spec, Intacct integration reference, decision log, workflow document.
-- `gotchas/` — `YYYY-MM-DD-short-title.md`.
-- App code lands here once scaffolded. Frappe app names must be **lowercase snake_case**
-  (`fuse_manufacturing`) — the folder is title-cased, the app name cannot be.
+**The repo root must contain exactly one visible directory: `fuse_manufacturing/`.**
+Frappe Cloud's "Add app from GitHub" picks a directory at the root and expects
+`hooks.py` inside it — a second one at the root (`docs/`, `gotchas/`) makes it reject
+the repo as "Not a valid Frappe App". That is why the docs live inside the app.
+
+- `fuse_manufacturing/` — the Frappe app (`hooks.py`, `gateway.py`, `masters.py`, `install.py`).
+- `fuse_manufacturing/docs/` — spec, Intacct integration reference, decision log, workflow document.
+- `fuse_manufacturing/gotchas/` — `YYYY-MM-DD-short-title.md`.
+- The GitHub repo is `fuse_manufacturing`, lowercase — `bench get-app` clones into a
+  folder named after the repo and then looks for a Python module of that same name.
+  The local folder is title-cased; that is fine, only the repo name matters.
 
 ## Git
 

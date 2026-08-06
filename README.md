@@ -60,5 +60,5 @@ no gateway credentials on the build machine. The XML envelope shapes follow the 
 app's proven raw-gateway calls, but the query/filter path is unproven until it runs
 against `leadertread-DEV`.
 
-See `docs/02-intacct-integration.md` for the gateway constraints, and
-`docs/03-decisions.md` for why the architecture is what it is.
+See `fuse_manufacturing/docs/02-intacct-integration.md` for the gateway constraints, and
+`fuse_manufacturing/docs/03-decisions.md` for why the architecture is what it is.
