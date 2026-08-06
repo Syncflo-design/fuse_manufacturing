@@ -13,6 +13,45 @@ from fuse_manufacturing import gateway
 from fuse_manufacturing.gateway import flag, number, val
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Entities
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@frappe.whitelist()
+def list_entities():
+	"""Every active entity in the Intacct company — E100, E200 and so on.
+
+	Read from LOCATIONENTITY, NOT LOCATION. LOCATION also returns ordinary locations
+	nested under entities, so it over-reports and you end up mapping an ERPNext company
+	onto something that is not an entity at all.
+
+	This does not write anything. Use it to see what exists, then set the matching
+	Intacct Entity ID on each ERPNext Company.
+	"""
+	rows = gateway.query(
+		"LOCATIONENTITY",
+		["RECORDNO", "LOCATIONID", "NAME", "STATUS"],
+		filter_xml="<equalto><field>STATUS</field><value>active</value></equalto>",
+	)
+
+	entities = [
+		{"entity_id": val(row, "LOCATIONID"), "name": val(row, "NAME"), "recordno": val(row, "RECORDNO")}
+		for row in rows
+	]
+
+	mapped = {
+		c.custom_intacct_entity_id: c.name
+		for c in frappe.get_all(
+			"Company", fields=["name", "custom_intacct_entity_id"], filters={"custom_intacct_entity_id": ["!=", ""]}
+		)
+	}
+	for entity in entities:
+		entity["erpnext_company"] = mapped.get(entity["entity_id"])
+
+	return entities
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Warehouses
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -28,38 +67,44 @@ def sync_warehouses(company=None):
 	transaction lines) refer to it, LOCATIONID is the accounting location. Both are
 	stored so neither has to be inferred later.
 	"""
-	company = company or _default_company()
-	rows = gateway.query("WAREHOUSE", WAREHOUSE_FIELDS)
+	result = {}
 
-	created = updated = 0
-	for row in rows:
-		warehouse_id = val(row, "WAREHOUSEID")
-		name = val(row, "NAME") or warehouse_id
-		if not warehouse_id:
-			continue
+	for comp in _target_companies(company):
+		# Queried on that company's entity session — a warehouse belongs to an entity,
+		# so reading E100's warehouses from an E200 session returns the wrong set.
+		rows = gateway.query("WAREHOUSE", WAREHOUSE_FIELDS, company=comp)
 
-		existing = frappe.db.get_value(
-			"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": company}, "name"
-		)
+		created = updated = 0
+		for row in rows:
+			warehouse_id = val(row, "WAREHOUSEID")
+			name = val(row, "NAME") or warehouse_id
+			if not warehouse_id:
+				continue
 
-		if existing:
-			doc = frappe.get_doc("Warehouse", existing)
-			updated += 1
-		else:
-			doc = frappe.new_doc("Warehouse")
-			doc.company = company
-			doc.is_group = 0
-			created += 1
+			existing = frappe.db.get_value(
+				"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": comp}, "name"
+			)
 
-		doc.warehouse_name = name
-		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
-		doc.custom_intacct_warehouse_id = warehouse_id
-		doc.custom_intacct_location_id = val(row, "LOCATIONID")
-		doc.custom_intacct_recordno = val(row, "RECORDNO")
-		doc.save(ignore_permissions=True)
+			if existing:
+				doc = frappe.get_doc("Warehouse", existing)
+				updated += 1
+			else:
+				doc = frappe.new_doc("Warehouse")
+				doc.company = comp
+				doc.is_group = 0
+				created += 1
+
+			doc.warehouse_name = name
+			doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
+			doc.custom_intacct_warehouse_id = warehouse_id
+			doc.custom_intacct_location_id = val(row, "LOCATIONID")
+			doc.custom_intacct_recordno = val(row, "RECORDNO")
+			doc.save(ignore_permissions=True)
+
+		result[comp] = {"read": len(rows), "created": created, "updated": updated}
 
 	frappe.db.commit()
-	return {"read": len(rows), "created": created, "updated": updated}
+	return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,7 +115,7 @@ BIN_FIELDS = ["RECORDNO", "BINID", "WAREHOUSEID", "STATUS"]
 
 
 @frappe.whitelist()
-def sync_bins():
+def sync_bins(company=None):
 	"""Intacct BIN → the default bin stored on each ERPNext Warehouse.
 
 	ERPNext has no location-bin concept — its own "Bin" DocType is the per-item,
@@ -82,29 +127,36 @@ def sync_bins():
 	"Default" is the lowest BINID, matching the donor, so the choice is deterministic
 	rather than dependent on the order Intacct happens to return.
 	"""
-	rows = gateway.query("BIN", BIN_FIELDS)
+	result = {}
 
-	lowest = {}
-	for row in rows:
-		if (val(row, "STATUS") or "active").lower() != "active":
-			continue
-		warehouse_id = val(row, "WAREHOUSEID")
-		bin_id = val(row, "BINID")
-		if not warehouse_id or not bin_id:
-			continue
-		if warehouse_id not in lowest or bin_id < lowest[warehouse_id]:
-			lowest[warehouse_id] = bin_id
+	for comp in _target_companies(company):
+		rows = gateway.query("BIN", BIN_FIELDS, company=comp)
 
-	stamped = 0
-	for warehouse_id, bin_id in lowest.items():
-		name = frappe.db.get_value("Warehouse", {"custom_intacct_warehouse_id": warehouse_id}, "name")
-		if not name:
-			continue
-		frappe.db.set_value("Warehouse", name, "custom_intacct_default_bin", bin_id, update_modified=False)
-		stamped += 1
+		lowest = {}
+		for row in rows:
+			if (val(row, "STATUS") or "active").lower() != "active":
+				continue
+			warehouse_id = val(row, "WAREHOUSEID")
+			bin_id = val(row, "BINID")
+			if not warehouse_id or not bin_id:
+				continue
+			if warehouse_id not in lowest or bin_id < lowest[warehouse_id]:
+				lowest[warehouse_id] = bin_id
+
+		stamped = 0
+		for warehouse_id, bin_id in lowest.items():
+			name = frappe.db.get_value(
+				"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": comp}, "name"
+			)
+			if not name:
+				continue
+			frappe.db.set_value("Warehouse", name, "custom_intacct_default_bin", bin_id, update_modified=False)
+			stamped += 1
+
+		result[comp] = {"read": len(rows), "warehouses_with_bins": len(lowest), "stamped": stamped}
 
 	frappe.db.commit()
-	return {"read": len(rows), "warehouses_with_bins": len(lowest), "stamped": stamped}
+	return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -236,11 +288,68 @@ def sync_items(modified_since=None):
 def sync_all(company=None):
 	"""Full masters pull, in dependency order."""
 	return {
+		"entities": list_entities(),
 		"warehouses": sync_warehouses(company=company),
 		"uoms": sync_uoms(),
 		"items": sync_items(),
+		"bins": sync_bins(company=company),
+	}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scheduled entry points
+# ──────────────────────────────────────────────────────────────────────────────
+
+# How far back to re-read on an incremental item sync, on top of the last run time.
+# Intacct stamps WHENMODIFIED in the company's own timezone, which is not guaranteed to
+# match the site's. An hour of deliberate overlap costs one extra page and removes a
+# whole class of silently-missed records. The sync is idempotent, so re-reading is free.
+ITEM_SYNC_OVERLAP_HOURS = 1
+
+
+def scheduled_item_sync():
+	"""Hourly. Incremental on WHENMODIFIED, with an hour of overlap."""
+	if not _enabled():
+		return
+
+	from frappe.utils import add_to_date, get_datetime, now_datetime
+
+	last = frappe.db.get_single_value("Intacct Settings", "last_item_sync")
+	since = None
+	if last:
+		since = add_to_date(get_datetime(last), hours=-ITEM_SYNC_OVERLAP_HOURS)
+		since = since.strftime("%m/%d/%Y %H:%M:%S")
+
+	started = now_datetime()
+	result = sync_items(modified_since=since)
+
+	# Stamped only after a clean run. A failure leaves the old watermark in place so the
+	# next attempt covers the same window rather than skipping over it.
+	frappe.db.set_single_value("Intacct Settings", "last_item_sync", started)
+	frappe.db.commit()
+	return result
+
+
+def scheduled_config_sync():
+	"""Daily. Warehouses, UOMs and bins — configuration, not data."""
+	if not _enabled():
+		return
+
+	return {
+		"warehouses": sync_warehouses(),
+		"uoms": sync_uoms(),
 		"bins": sync_bins(),
 	}
+
+
+# Items and UOMs are read once for the whole Intacct company rather than per entity:
+# the item master is shared across entities, so pulling it per entity would just
+# re-read the same rows N times. The session still has to be opened against some
+# entity — Intacct rejects a top-level login — so it uses the default on Settings.
+
+
+def _enabled():
+	return bool(frappe.db.get_single_value("Intacct Settings", "enabled"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -248,14 +357,29 @@ def sync_all(company=None):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _default_company():
-	companies = frappe.get_all("Company", pluck="name", limit=2)
-	if len(companies) != 1:
+def _target_companies(company=None):
+	"""Which ERPNext companies to sync — one per Intacct entity.
+
+	An Intacct company holds many entities (E100, E200...). Each one maps to its own
+	ERPNext Company carrying that entity ID, because warehouses, stock and postings all
+	belong to an entity rather than to the company as a whole.
+	"""
+	if company:
+		return [company]
+
+	companies = frappe.get_all(
+		"Company",
+		pluck="name",
+		filters={"custom_intacct_entity_id": ["not in", ["", None]]},
+		order_by="name",
+	)
+	if not companies:
 		frappe.throw(
-			"Pass the company explicitly — this site has "
-			f"{len(companies)} companies and one Intacct company maps to one of them."
+			"No ERPNext Company has an Intacct Entity ID set. "
+			"Run fuse_manufacturing.masters.list_entities to see the entities available, "
+			"then set the matching one on each Company."
 		)
-	return companies[0]
+	return companies
 
 
 def _default_item_group():

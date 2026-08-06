@@ -21,7 +21,9 @@
   "page_size",
   "timeout",
   "column_break_tuning",
-  "max_attempts"
+  "max_attempts",
+  "status_section",
+  "last_item_sync"
  ],
  "fields": [
   {
@@ -130,6 +132,18 @@
    "fieldtype": "Int",
    "label": "Max Attempts",
    "description": "Transient failures only (timeout, empty response, 5xx, 429). A genuine rejection is never retried."
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_item_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Item Sync",
+   "read_only": 1,
+   "description": "Set only after a clean hourly run. A failure leaves it alone so the next attempt covers the same window instead of skipping it. Clear this to force a full re-read."
   }
  ],
  "issingle": 1,

@@ -6,3 +6,17 @@ app_email       = "ops@syncflo.co.za"
 app_license     = "MIT"
 
 after_install = "fuse_manufacturing.install.after_install"
+
+# Masters are a one-way mirror, so the only question is how stale we tolerate them being.
+# Items move (new codes, renames, tracking flags) — hourly, incremental.
+# Warehouses, UOMs and bins are configuration someone changes deliberately — daily is
+# plenty, and a full pull of each is seconds.
+# Both jobs no-op when Intacct Settings is disabled.
+scheduler_events = {
+	"hourly_long": [
+		"fuse_manufacturing.masters.scheduled_item_sync",
+	],
+	"daily_long": [
+		"fuse_manufacturing.masters.scheduled_config_sync",
+	],
+}

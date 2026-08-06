@@ -127,16 +127,41 @@ def _check_result(root):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def login(force=False):
-	"""Return a gateway session id, reusing a cached one where possible.
+def entity_for_company(company):
+	"""The Intacct entity (locationid) an ERPNext Company posts into.
+
+	One Intacct company holds many entities — E100, E200 and so on. They share one
+	credential set; what differs is which entity the session is opened against. Each
+	ERPNext Company carries its own, so a transaction's entity is a property of the
+	company it belongs to rather than a global setting.
+	"""
+	if not company:
+		return settings().entity_id
+
+	entity = frappe.db.get_value("Company", company, "custom_intacct_entity_id")
+	if not entity:
+		frappe.throw(
+			f"Company {company} has no Intacct Entity ID. "
+			"Set it on the Company — every gateway login and every transaction line needs it."
+		)
+	return entity
+
+
+def login(entity_id=None, company=None, force=False):
+	"""Return a gateway session id for one entity, reusing a cached one where possible.
 
 	The login carries <locationid>. Manufacturing transaction definitions are set to
 	"Entity only", so a top-level session is rejected with BL01001973.
+
+	Sessions are cached per entity, not globally: a session opened against E100 cannot
+	post into E200.
 	"""
 	cfg = settings()
 	_require_enabled(cfg)
 
-	cache_key = f"{cfg.company_id}:{cfg.entity_id or ''}"
+	entity_id = entity_id or entity_for_company(company) or cfg.entity_id
+
+	cache_key = f"{cfg.company_id}:{entity_id or ''}"
 	cached = _session_cache.get(cache_key)
 	if cached and not force and (time.time() - cached[1]) < SESSION_LIFE_SECONDS:
 		return cached[0]
@@ -149,8 +174,8 @@ def login(force=False):
 	ET.SubElement(login_el, "userid").text = cfg.user_id
 	ET.SubElement(login_el, "companyid").text = cfg.company_id
 	ET.SubElement(login_el, "password").text = cfg.get_password("user_password")
-	if cfg.entity_id:
-		ET.SubElement(login_el, "locationid").text = cfg.entity_id
+	if entity_id:
+		ET.SubElement(login_el, "locationid").text = entity_id
 
 	content = ET.SubElement(operation, "content")
 	function = ET.SubElement(content, "function", {"controlid": str(uuid.uuid4())})
@@ -180,7 +205,7 @@ def _request_with_session(cfg, session_id):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def query(object_name, fields, filter_xml=None, page_size=None):
+def query(object_name, fields, filter_xml=None, page_size=None, entity_id=None, company=None):
 	"""Read every row of an Intacct object, paging until exhausted.
 
 	Ordered by RECORDNO, always. Without an explicit order Intacct returns rows in any
@@ -196,7 +221,7 @@ def query(object_name, fields, filter_xml=None, page_size=None):
 	"""
 	cfg = settings()
 	_require_enabled(cfg)
-	session_id = login()
+	session_id = login(entity_id=entity_id, company=company)
 	size = page_size or cfg.page_size or 1000
 
 	rows = []
@@ -240,8 +265,12 @@ def query(object_name, fields, filter_xml=None, page_size=None):
 	return rows
 
 
-def execute(function_element):
+def execute(function_element, entity_id=None, company=None):
 	"""Post one write function (create/update/delete) and return the affected key.
+
+	Pass the ERPNext company (or the entity directly) so the session is opened against
+	the right entity. Posting into the wrong entity is not an error Intacct will catch
+	for you — it will succeed, in the wrong place.
 
 	Deliberately one function per call. Multi-record posts that must succeed or fail
 	together need <operation transaction="true"> — add that when a caller genuinely
@@ -249,7 +278,7 @@ def execute(function_element):
 	"""
 	cfg = settings()
 	_require_enabled(cfg)
-	session_id = login()
+	session_id = login(entity_id=entity_id, company=company)
 
 	request, content = _request_with_session(cfg, session_id)
 	content.append(function_element)

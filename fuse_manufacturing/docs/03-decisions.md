@@ -94,6 +94,46 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-06 — Generic Intacct methods first; custom definitions are a last resort
+
+**Decision:** Use Intacct's own transaction definitions and standard functions wherever
+they do the job. Create a custom definition only when a generic one genuinely cannot,
+and **write down why** — here, plus a note in `02-intacct-integration.md`.
+
+**Why:** every custom definition is a per-client configuration step, a thing that can
+drift between DEV and live, and a thing the next person has to discover. The donor
+already showed the cost of the opposite habit: it posted all works-order movement as
+generic stock adjustments because SBMS couldn't do better, and that is precisely the
+workaround being retired.
+
+**Consequences:** before building a posting, check what Intacct already ships —
+`create_whtransfer` for transfers, the four manufacturing definitions, conversions via
+`createdfrom`. Reach for a new definition only after that check fails.
+
+## 2026-08-06 — Mobile / barcode scanner flows are a first-class target
+
+**Decision:** The scanner flows carry over from the donor. Build the posting layer so
+they are reachable from a lightweight mobile page, not only from a desk form.
+
+**Why:** the donor has a working mobile/barcode version and the client's people already
+use it. Retrofitting mobile onto logic buried in desk form hooks means writing it twice.
+See [[barcodes-mobile-only]] — barcodes are a mobile-only feature, not a desktop one.
+
+**Consequences:** posting logic lives in plain whitelisted functions taking explicit
+arguments, not in `on_submit` handlers that assume a fully-populated desk document. The
+desk form and the scanner page both call the same function.
+
+## 2026-08-06 — Point at `leadertread-DEV`
+
+**Decision:** The Leadertread ERPNext site's Intacct Settings target the **DEV** company,
+not `leadertread-imp`.
+**Why:** the posting layer has to be proven — production run, goods receipt, warehouse
+transfer, stock adjustment, all correctly costed — without touching the live company.
+**Consequences:** a dev company's configuration drifts from live, so the live company's
+transaction definitions must be re-read before any go-live date is committed. The entity
+ID must also be confirmed against DEV: the donor's `E100` was set alongside the live
+company block and is not verified to exist in DEV.
+
 ## 2026-08-06 — 1 client = 1 ERPNext instance = 1 Intacct company
 
 **Decision:** One credential set per instance. Company → entity (`locationid`) → location.
