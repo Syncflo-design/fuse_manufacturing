@@ -42,7 +42,9 @@ def list_entities():
 	mapped = {
 		c.custom_intacct_entity_id: c.name
 		for c in frappe.get_all(
-			"Company", fields=["name", "custom_intacct_entity_id"], filters={"custom_intacct_entity_id": ["!=", ""]}
+			"Company",
+			fields=["name", "custom_intacct_entity_id"],
+			filters={"custom_intacct_entity_id": ["is", "set"]},
 		)
 	}
 	for entity in entities:
@@ -92,6 +94,9 @@ def sync_warehouses(company=None):
 				doc = frappe.new_doc("Warehouse")
 				doc.company = comp
 				doc.is_group = 0
+				# Warehouse is a tree. Without a parent the new node becomes a second
+				# root, which ERPNext rejects, so hang it off the company's own group.
+				doc.parent_warehouse = _root_warehouse(comp)
 				created += 1
 
 			doc.warehouse_name = name
@@ -263,7 +268,15 @@ def sync_items(modified_since=None):
 		if uom:
 			doc.stock_uom = uom
 		doc.has_batch_no = 1 if flag(row, "ENABLE_LOT_CATEGORY") else 0
-		doc.weight_per_unit = number(row, "NETWEIGHT", 0)
+
+		# Weight only when there is one. ERPNext makes weight_uom mandatory as soon as
+		# weight_per_unit is non-zero, and Intacct's NETWEIGHT carries no unit at all,
+		# so a blind copy fails validation on every item that happens to have a weight.
+		weight = number(row, "NETWEIGHT", 0)
+		if weight:
+			doc.weight_per_unit = weight
+			if not doc.weight_uom:
+				doc.weight_uom = uom or doc.stock_uom
 
 		doc.custom_intacct_item_id = item_code
 		doc.custom_intacct_recordno = val(row, "RECORDNO")
@@ -367,10 +380,13 @@ def _target_companies(company=None):
 	if company:
 		return [company]
 
+	# "is set" rather than ["not in", ["", None]] — the latter becomes
+	# `NOT IN ('', NULL)` in SQL, which evaluates to unknown for every row and returns
+	# nothing at all, even when the field is populated.
 	companies = frappe.get_all(
 		"Company",
 		pluck="name",
-		filters={"custom_intacct_entity_id": ["not in", ["", None]]},
+		filters={"custom_intacct_entity_id": ["is", "set"]},
 		order_by="name",
 	)
 	if not companies:
@@ -380,6 +396,16 @@ def _target_companies(company=None):
 			"then set the matching one on each Company."
 		)
 	return companies
+
+
+def _root_warehouse(company):
+	"""The company's top-level warehouse group, to parent new warehouses under."""
+	root = frappe.db.get_value("Warehouse", {"company": company, "is_group": 1, "parent_warehouse": ""}, "name")
+	if not root:
+		root = frappe.db.get_value("Warehouse", {"company": company, "is_group": 1}, "name")
+	if not root:
+		frappe.throw(f"Company {company} has no group warehouse to create warehouses under.")
+	return root
 
 
 def _default_item_group():
