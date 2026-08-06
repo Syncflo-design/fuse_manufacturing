@@ -1,0 +1,77 @@
+{
+ "app": "fuse_manufacturing",
+ "charts": [],
+ "content": "[{\"id\":\"fuse_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Dashboard</b></span>\",\"col\":12}},{\"id\":\"fuse_sc_wo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Works Orders\",\"col\":4}},{\"id\":\"fuse_sc_wip\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WIP Conversion\",\"col\":4}},{\"id\":\"fuse_sc_quick\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quick Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_bulk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bulk Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_adj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Adjustment\",\"col\":4}},{\"id\":\"fuse_sc_stock\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Control\",\"col\":4}}]",
+ "creation": "2026-08-06 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "stock",
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Fuse",
+ "links": [],
+ "modified": "2026-08-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Stock Controller"
+  }
+ ],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Works Orders",
+   "link_to": "Work Order",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "WIP Conversion",
+   "link_to": "Stock Entry",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Quick Item Transfer",
+   "link_to": "Stock Entry",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Bulk Item Transfer",
+   "link_to": "Stock Entry",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Item Adjustment",
+   "link_to": "Stock Reconciliation",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "label": "Stock Control",
+   "link_to": "Stock Balance",
+   "report_ref_doctype": "Stock Ledger Entry",
+   "type": "Report"
+  }
+ ],
+ "title": "Fuse",
+ "type": "Workspace"
+}

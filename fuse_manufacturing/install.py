@@ -64,7 +64,15 @@ CUSTOM_FIELDS = {
 			"label": "Intacct Location ID",
 			"insert_after": "custom_intacct_warehouse_id",
 			"read_only": 1,
-			"description": "LOCATIONID — the accounting location. Not guaranteed to equal the warehouse ID.",
+			"description": "LOC.LOCATIONID — the warehouse's location. Note Intacct's own LOCATIONID field on WAREHOUSE is a duplicate of WAREHOUSEID, not the location.",
+		},
+		{
+			"fieldname": "custom_intacct_entity_id",
+			"fieldtype": "Data",
+			"label": "Intacct Entity ID",
+			"insert_after": "custom_intacct_location_id",
+			"read_only": 1,
+			"description": "MEGAENTITYID — the entity this warehouse belongs to. Blank means top-level, shared by all entities.",
 		},
 		{
 			"fieldname": "custom_intacct_default_bin",
@@ -82,6 +90,18 @@ CUSTOM_FIELDS = {
 			"read_only": 1,
 		},
 	],
+	"BOM": [
+		{
+			"fieldname": "custom_intacct_signature",
+			"fieldtype": "Data",
+			"label": "Intacct Recipe Signature",
+			"insert_after": "item",
+			"read_only": 1,
+			"hidden": 1,
+			"allow_on_submit": 1,
+			"description": "Fingerprint of the Intacct kit recipe this BOM was built from. Lets the sync tell a changed recipe from an unchanged one, so it does not cancel and rebuild every BOM on every run.",
+		},
+	],
 	"Company": [
 		{
 			"fieldname": "custom_intacct_entity_id",
@@ -94,6 +114,18 @@ CUSTOM_FIELDS = {
 }
 
 
+# The role the Fuse workspace is restricted to. A user holding only this role sees only
+# that workspace, which makes it their landing page without any per-user setting to keep
+# in step. Warehouse and Intacct Bin stay read-only for it — Intacct owns those.
+ROLE = "Stock Controller"
+
+
 def after_install():
 	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
+
+	if not frappe.db.exists("Role", ROLE):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": ROLE, "desk_access": 1, "is_custom": 1}
+		).insert(ignore_permissions=True)
+
 	frappe.db.commit()
