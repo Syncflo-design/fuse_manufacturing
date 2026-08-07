@@ -747,10 +747,21 @@ def _retire(doctype, name, field, off_value):
 def remove_erpnext_defaults(company=None):
 	"""Strip ERPNext's shipped UOMs and warehouses that Intacct does not use.
 
-	Run AFTER the masters are in — it decides what to keep by what Intacct sent, so
-	running it against an empty site would remove everything.
+	Refuses to run unless the masters are already in. It decides what to KEEP from what
+	Intacct sent, so against an empty or half-synced site it would conclude that nothing
+	is in use and remove everything. That must not depend on anyone remembering to run
+	it in the right order.
 	"""
 	company = company or _target_companies()[0]
+
+	items = frappe.db.count("Item")
+	warehouses = frappe.db.count("Warehouse", {"custom_intacct_warehouse_id": ["is", "set"]})
+	if not items or not warehouses:
+		frappe.throw(
+			f"Refusing to remove defaults: the site has {items} items and {warehouses} "
+			"Intacct warehouses. Run the masters sync first — this decides what to keep "
+			"from what Intacct sent, and against an empty site that is nothing."
+		)
 
 	# ── UOMs ────────────────────────────────────────────────────────────────
 	# Keep anything an Item actually references, whether as its stock unit or as a
