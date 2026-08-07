@@ -831,6 +831,9 @@ JOBS = {
 	"all": "sync_all",
 	"opening_stock": "post_opening_stock",
 	"drift": "stock_drift_report",
+	# Used by the scheduler, not normally queued by hand.
+	"items_incremental": "_sync_items_incremental",
+	"config": "_sync_config",
 }
 
 
@@ -855,22 +858,45 @@ def enqueue_sync(job, company=None):
 
 
 def run_sync(job, company=None):
-	"""Run a named sync and record the outcome. Called by the queue, not directly."""
+	"""Run a named sync and record the outcome. Called by the queue, not directly.
+
+	Serialised behind a single lock. Intacct allows only about FIVE concurrent
+	connections per company and QUEUES the rest rather than rejecting them, so
+	overlapping syncs do not fail loudly — they crawl, and then hit the 15-minute
+	request timeout looking like an Intacct problem. The hourly item sync, the daily
+	config sync and any manually queued job would otherwise happily run at once.
+	"""
 	import traceback
 
 	from frappe.utils import now_datetime
+	from frappe.utils.synchronization import filelock
 
 	started = now_datetime()
+
 	try:
-		fn = globals()[JOBS[job]]
-		result = fn(company=company) if job not in ("uoms", "drift") else fn()
-		payload = {"job": job, "status": "ok", "result": result}
-	except Exception:
-		# Record the failure where it can be read, then re-raise so it also lands in
-		# the Error Log with a full traceback.
-		payload = {"job": job, "status": "failed", "error": traceback.format_exc()[-2000:]}
+		# Non-blocking: a second sync does not stack up behind the first, it stands down
+		# and says so. Queueing them would just move the concurrency problem.
+		with filelock("fuse_intacct_sync", timeout=1):
+			try:
+				fn = globals()[JOBS[job]]
+				# sync_uoms is the only one with no company argument — UOMs are shared
+				# across the whole Intacct company, not held per entity.
+				result = fn() if job == "uoms" else fn(company=company)
+				payload = {"job": job, "status": "ok", "result": result}
+			except Exception:
+				# Record the failure where it can be read, then re-raise so it also
+				# lands in the Error Log with a full traceback.
+				payload = {"job": job, "status": "failed", "error": traceback.format_exc()[-2000:]}
+				_record_sync_result(payload, started)
+				raise
+	except frappe.LockTimeoutError:
+		payload = {
+			"job": job,
+			"status": "skipped",
+			"reason": "another Intacct sync is already running — not stacking a second one",
+		}
 		_record_sync_result(payload, started)
-		raise
+		return payload
 
 	_record_sync_result(payload, started)
 	return payload
@@ -901,10 +927,17 @@ ITEM_SYNC_OVERLAP_HOURS = 1
 
 
 def scheduled_item_sync():
-	"""Hourly. Incremental on WHENMODIFIED, with an hour of overlap."""
+	"""Hourly. Incremental on WHENMODIFIED, with an hour of overlap.
+
+	Goes through run_sync so it takes the same lock as everything else — the hourly job
+	must never overlap the daily one, or a manual pull, and open competing sessions.
+	"""
 	if not _enabled():
 		return
+	return run_sync("items_incremental")
 
+
+def _sync_items_incremental(company=None):
 	from frappe.utils import add_to_date, get_datetime, now_datetime
 
 	last = frappe.db.get_single_value("Intacct Settings", "last_item_sync")
@@ -927,11 +960,14 @@ def scheduled_config_sync():
 	"""Daily. Warehouses, UOMs and bins — configuration, not data."""
 	if not _enabled():
 		return
+	return run_sync("config")
 
+
+def _sync_config(company=None):
 	return {
-		"warehouses": sync_warehouses(),
+		"warehouses": sync_warehouses(company=company),
 		"uoms": sync_uoms(),
-		"bins": sync_bins(),
+		"bins": sync_bins(company=company),
 	}
 
 
