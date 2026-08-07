@@ -575,10 +575,16 @@ def sync_items(modified_since=None):
 
 	created = updated = skipped = 0
 	missing_uoms = set()
-	precisions = set()
+
+	# Precision FIRST, before a single item is written.
+	#
+	# This used to run at the end, which meant a fresh install imported every item at
+	# ERPNext's default precision and only then raised it — leaving 2,566 items rounded
+	# and needing a full re-import. Exactly the misalignment a self-configuring install
+	# is meant to prevent. The rows are already in memory, so this costs nothing.
+	precision_result = align_float_precision({val(row, "INV_PRECISION") for row in rows})
 
 	for row in rows:
-		precisions.add(val(row, "INV_PRECISION"))
 		item_code = val(row, "ITEMID")
 		if not item_code:
 			continue
@@ -702,9 +708,7 @@ def sync_items(modified_since=None):
 	result = {"read": len(rows), "created": created, "updated": updated, "skipped": skipped}
 	if missing_uoms:
 		result["missing_uoms"] = sorted(missing_uoms)
-
-	# Align decimal places to whatever Intacct actually uses, after the items are in.
-	result["float_precision"] = align_float_precision(precisions)
+	result["float_precision"] = precision_result
 	return result
 
 
@@ -770,12 +774,30 @@ def remove_erpnext_defaults(company=None):
 	# a parent filter — so read it directly. Missing these would disable the purchase and
 	# sales units we just imported, which is the opposite of the intent.
 	in_use = set(frappe.get_all("Item", pluck="stock_uom", limit_page_length=0))
-	in_use.update(
-		row[0]
-		for row in frappe.db.sql(
-			"select distinct uom from `tabUOM Conversion Detail` where uom is not null"
-		)
-	)
+
+	# Also every unit any existing document already uses. Disabling one that a BOM or a
+	# stock movement references does not break the stored record, but it does break the
+	# next validation of it — and those documents are history we do not get to edit.
+	for table, column in (
+		("tabUOM Conversion Detail", "uom"),
+		("tabBOM Item", "uom"),
+		("tabBOM", "uom"),
+		("tabStock Entry Detail", "uom"),
+		("tabStock Reconciliation Item", "uom"),
+		("tabWork Order Item", "stock_uom"),
+	):
+		try:
+			in_use.update(
+				row[0]
+				for row in frappe.db.sql(
+					f"select distinct `{column}` from `{table}` where `{column}` is not null"
+				)
+			)
+		except Exception:
+			# A doctype that does not exist on this site is not an error — the app must
+			# install on instances without every ERPNext module in play.
+			frappe.db.rollback()
+
 	in_use.discard(None)
 
 	uom_result = {"deleted": 0, "disabled": 0, "kept": 0}
@@ -1303,7 +1325,11 @@ def _recipe_signature(lines):
 
 
 def _build_bom(kit_code, lines, company):
-	"""Create or replace the BOM for one kit. Returns an outcome string."""
+	"""Create the BOM for one kit. Returns an outcome string.
+
+	Only creates. Anything it replaces has already been cancelled and deleted by
+	sync_kits, in parent-first order.
+	"""
 	if not frappe.db.exists("Item", kit_code):
 		return "kit item not synced"
 
@@ -1675,6 +1701,7 @@ def _has_changes(doc):
 	"""
 	if doc.is_new():
 		return True
+
 	stored = frappe.db.get_value(doc.doctype, doc.name, "*", as_dict=True) or {}
 	for field in doc.meta.get_valid_columns():
 		if field in ("modified", "modified_by", "creation", "owner", "idx", "_user_tags",
@@ -1682,6 +1709,32 @@ def _has_changes(doc):
 			continue
 		if str(stored.get(field) or "") != str(doc.get(field) or ""):
 			return True
+
+	# Child tables too. Comparing only the parent row missed changes that live entirely
+	# in a child table — a UOM conversion factor or a barcode — so an item whose purchase
+	# unit changed in Intacct would be read, compared, judged unchanged, and never saved.
+	for table_field in doc.meta.get_table_fields():
+		rows = doc.get(table_field.fieldname) or []
+		stored_rows = frappe.get_all(
+			table_field.options,
+			filters={"parent": doc.name, "parentfield": table_field.fieldname},
+			fields=["*"],
+			limit_page_length=0,
+		)
+		if len(rows) != len(stored_rows):
+			return True
+
+		compare_fields = [
+			f.fieldname
+			for f in frappe.get_meta(table_field.options).fields
+			if f.fieldtype not in frappe.model.no_value_fields
+		]
+		def as_key(row, fields=compare_fields):
+			return tuple(str(row.get(f) or "") for f in fields)
+
+		if sorted(as_key(r) for r in rows) != sorted(as_key(r) for r in stored_rows):
+			return True
+
 	return False
 
 
