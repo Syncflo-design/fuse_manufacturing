@@ -136,6 +136,114 @@ def is_stock_item(item_type):
 	return normalised == "inventory" or "stockable kit" in normalised
 
 
+def transfer_legs(lines):
+	"""Turn transfer lines into Intacct's two-leg form.
+
+	Intacct models a transfer as ONE document carrying both halves: an "O" line leaving
+	the source and an "I" line arriving at the destination. Sending only one side is an
+	adjustment, not a transfer.
+
+	Quantities are always POSITIVE — direction comes from IN_OUT, never from the sign.
+	Send -10 and Intacct will take it literally.
+
+	`lines` are dicts of item_code, qty, uom, from_warehouse, to_warehouse.
+	Raises ValueError on anything Intacct would reject or, worse, silently accept wrongly.
+	"""
+	legs = []
+	for line in lines:
+		qty = float(line.get("qty") or 0)
+		if qty <= 0:
+			raise ValueError(f"{line.get('item_code')}: quantity must be positive, got {qty}")
+		if not line.get("from_warehouse") or not line.get("to_warehouse"):
+			raise ValueError(f"{line.get('item_code')}: both warehouses are required")
+		if line["from_warehouse"] == line["to_warehouse"]:
+			raise ValueError(f"{line.get('item_code')}: source and destination are the same warehouse")
+		if not line.get("uom"):
+			raise ValueError(f"{line.get('item_code')}: unit is required and must match the item's UOM exactly")
+
+		for direction, warehouse in (("O", line["from_warehouse"]), ("I", line["to_warehouse"])):
+			legs.append(
+				{
+					"in_out": direction,
+					"item_id": line["item_code"],
+					"warehouse_id": warehouse,
+					"quantity": qty,
+					"unit": line["uom"],
+				}
+			)
+	return legs
+
+
+def produced_unit_cost(consumed, produced_qty):
+	"""Unit cost of what was made, from the cost of what was actually consumed.
+
+	Intacct values the produce leg (UPDATES_COST=true) and takes the cost we send, so
+	this number has to be right. It is DERIVED, not invented: every component rate came
+	from Intacct in the first place, so the total is Intacct's own money divided by the
+	quantity actually produced.
+
+	`consumed` is dicts of qty and rate. Returns a unit cost, never negative.
+	"""
+	produced_qty = float(produced_qty or 0)
+	if produced_qty <= 0:
+		raise ValueError(f"produced quantity must be positive, got {produced_qty}")
+
+	total = sum(float(line.get("qty") or 0) * float(line.get("rate") or 0) for line in consumed)
+	if total < 0:
+		raise ValueError("consumed cost cannot be negative")
+	return total / produced_qty
+
+
+def manufacture_legs(consumed, produced_item, produced_qty, produced_uom, warehouse):
+	"""The two legs of a production run, as Intacct wants them.
+
+	They are SEPARATE transaction definitions, so they cannot share one document:
+	  Manufacturing Backflush Decr — components consumed, no cost (the definition has
+	                                 UPDATES_COST=false; sending a cost would override
+	                                 Intacct's own valuation of the components)
+	  Manufacturing Run Increase   — finished goods in, WITH unit cost
+
+	Quantities are POSITIVE on both. Each definition applies its own sign — send a
+	negative on a decrease definition and it double-negates, moving stock the wrong way.
+	"""
+	if not consumed:
+		raise ValueError("a production run must consume something")
+	produced_qty = float(produced_qty or 0)
+	if produced_qty <= 0:
+		raise ValueError(f"produced quantity must be positive, got {produced_qty}")
+	if not produced_uom:
+		raise ValueError("produced unit is required and must match the item's UOM exactly")
+
+	for line in consumed:
+		if float(line.get("qty") or 0) <= 0:
+			raise ValueError(f"{line.get('item_code')}: consumed quantity must be positive")
+		if not line.get("uom"):
+			raise ValueError(f"{line.get('item_code')}: unit is required")
+
+	return {
+		"consume": [
+			{
+				"item_id": line["item_code"],
+				"warehouse_id": line["warehouse"],
+				"quantity": float(line["qty"]),
+				"unit": line["uom"],
+				"bin": line.get("bin"),
+				# No cost. The definition does not value this leg.
+			}
+			for line in consumed
+		],
+		"produce": [
+			{
+				"item_id": produced_item,
+				"warehouse_id": warehouse,
+				"quantity": produced_qty,
+				"unit": produced_uom,
+				"cost": produced_unit_cost(consumed, produced_qty),
+			}
+		],
+	}
+
+
 def kit_build_order(kit_codes, recipes):
 	"""Order kits so every kit is built after the kits it consumes.
 

@@ -18,6 +18,16 @@ after_migrate = "fuse_manufacturing.install.after_install"
 # Warehouses, UOMs and bins are configuration someone changes deliberately — daily is
 # plenty, and a full pull of each is seconds.
 # Both jobs no-op when Intacct Settings is disabled.
+# Intacct posts FIRST: on_submit runs inside ERPNext's submit transaction, so a rejection
+# raises and the ERPNext document does not stand. Gated by "Post Stock Movements" on
+# Intacct Settings — a site syncs masters long before it is ready to post.
+doc_events = {
+	"Stock Entry": {
+		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
+		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
+	},
+}
+
 scheduler_events = {
 	"hourly_long": [
 		"fuse_manufacturing.masters.scheduled_item_sync",

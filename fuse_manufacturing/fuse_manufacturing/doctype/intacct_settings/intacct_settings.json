@@ -5,6 +5,7 @@
  "engine": "InnoDB",
  "field_order": [
   "enabled",
+  "post_movements",
   "gateway_url",
   "credentials_section",
   "sender_id",
@@ -34,6 +35,13 @@
    "fieldtype": "Check",
    "label": "Enabled",
    "description": "Master switch. When off, every gateway call raises instead of contacting Intacct."
+  },
+  {
+   "default": "0",
+   "fieldname": "post_movements",
+   "fieldtype": "Check",
+   "label": "Post Stock Movements to Intacct",
+   "description": "OFF by default. While off, stock movements are recorded in ERPNext only. Turn it on when the site is ready to post — from then on, a movement Intacct rejects will not submit in ERPNext either."
   },
   {
    "default": "https://api.intacct.com/ia/xml/xmlgw.phtml",

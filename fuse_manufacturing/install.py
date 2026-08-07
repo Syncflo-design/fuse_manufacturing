@@ -110,6 +110,32 @@ CUSTOM_FIELDS = {
 			"description": "SHA1 of the Intacct kit recipe this BOM was built from. Lets the sync tell a changed recipe from an unchanged one, so it does not cancel and rebuild every BOM on every run. Hashed because a real compound recipe runs well past a Data field's 140 characters.",
 		},
 	],
+	"Stock Entry": [
+		{
+			"fieldname": "custom_intacct_section",
+			"fieldtype": "Section Break",
+			"label": "Intacct",
+			"insert_after": "posting_time",
+			"collapsible": 1,
+		},
+		{
+			"fieldname": "custom_intacct_key",
+			"fieldtype": "Data",
+			"label": "Intacct Key",
+			"insert_after": "custom_intacct_section",
+			"read_only": 1,
+			"allow_on_submit": 1,
+			"description": "RECORDNO of the Intacct document this movement created. Its presence is what blocks cancellation.",
+		},
+		{
+			"fieldname": "custom_intacct_posted_on",
+			"fieldtype": "Datetime",
+			"label": "Posted to Intacct",
+			"insert_after": "custom_intacct_key",
+			"read_only": 1,
+			"allow_on_submit": 1,
+		},
+	],
 	"Item Group": [
 		{
 			"fieldname": "custom_intacct_product_line",
