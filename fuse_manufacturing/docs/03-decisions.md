@@ -239,7 +239,19 @@ ways. If they stop agreeing, that is a fault to find, not a number to overwrite.
   lot, not as a warehouse total, so opening them blind would invent tracking data.
   They need a deliberate decision before go-live.
 
-## 2026-08-06 — "Home" always means the user's Fuse landing page, never the desk
+## 2026-08-07 — REVERSED: reach the Fuse page from a workspace tile, not a home-page hook
+
+**Supersedes the decision below.** `home_page` and `role_home_page` govern the **website**
+home page. The desk always lands on a **workspace**, so those hooks looked correct, passed
+review, deployed — and the desk kept reverting. Both removed.
+
+**Decision:** the Fuse page is reached from a tile on the Fuse workspace. One workspace per
+role, restricted by role, each with the tiles that role needs.
+
+**Why:** it is how Frappe expects it to work, so it survives upgrades and needs no
+redirect shim. Russell's call — do not fight the framework.
+
+## 2026-08-06 — "Home" always means the user's Fuse landing page, never the desk (SUPERSEDED)
 
 **Decision:** The breadcrumb house, `/app`, and post-login all land on the user's Fuse
 home page. Set via `home_page = "fuse-home"` in `fuse_theme`, with `role_home_page` kept

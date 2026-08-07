@@ -1,7 +1,7 @@
 {
  "app": "fuse_manufacturing",
  "charts": [],
- "content": "[{\"id\":\"fuse_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Dashboard</b></span>\",\"col\":12}},{\"id\":\"fuse_sc_wo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Works Orders\",\"col\":4}},{\"id\":\"fuse_sc_wip\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WIP Conversion\",\"col\":4}},{\"id\":\"fuse_sc_quick\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quick Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_bulk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bulk Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_adj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Adjustment\",\"col\":4}},{\"id\":\"fuse_sc_stock\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Control\",\"col\":4}}]",
+ "content": "[{\"id\":\"fuse_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Dashboard</b></span>\",\"col\":12}},{\"id\":\"fuse_sc_home\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Fuse Home\",\"col\":4}},{\"id\":\"fuse_sc_wo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Works Orders\",\"col\":4}},{\"id\":\"fuse_sc_wip\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WIP Conversion\",\"col\":4}},{\"id\":\"fuse_sc_quick\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quick Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_bulk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bulk Item Transfer\",\"col\":4}},{\"id\":\"fuse_sc_adj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Adjustment\",\"col\":4}},{\"id\":\"fuse_sc_stock\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Control\",\"col\":4}}]",
  "creation": "2026-08-06 00:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -29,6 +29,12 @@
  ],
  "sequence_id": 1.0,
  "shortcuts": [
+  {
+   "color": "Green",
+   "label": "Fuse Home",
+   "link_to": "fuse-home",
+   "type": "Page"
+  },
   {
    "color": "Green",
    "doc_view": "List",
