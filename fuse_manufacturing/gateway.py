@@ -10,7 +10,6 @@ The constraints encoded below were learned the hard way on the donor app. See
 docs/02-intacct-integration.md before changing any of them.
 """
 
-import hashlib
 import re
 import time
 import uuid
@@ -18,6 +17,8 @@ import xml.etree.ElementTree as ET
 
 import frappe
 import requests
+
+from fuse_manufacturing import rules
 
 # Intacct sessions idle out at around an hour. Twenty minutes is comfortably inside
 # that, and a stale one simply forces a fresh login. Re-logging in per call turned one
@@ -42,21 +43,9 @@ def _require_enabled(cfg):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def control_id_for(doctype, name, purpose=""):
-	"""A control ID that is the SAME every time for the same piece of work.
-
-	This is what makes a retry safe. If a request times out AFTER Intacct committed it,
-	the retry carries the same control ID and — with <uniqueid>true</uniqueid> — Intacct
-	rejects the replay instead of posting the movement twice. Without it, the retry
-	logic in _post is a stock-duplication machine.
-
-	Derived from the ERPNext document, so it is reproducible from the document alone
-	rather than stored and hoped for.
-	"""
-	raw = f"{doctype}:{name}:{purpose}".strip(":")
-	# Intacct accepts a generous control ID, but keep it short, printable and stable.
-	digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-	return f"fuse-{digest}"
+# A control ID that is the SAME every time for the same piece of work — what makes a
+# retry safe. Lives in rules.py so it is covered by tests that need no site.
+control_id_for = rules.control_id_for
 
 
 def _control(cfg, control_id=None, unique=False):

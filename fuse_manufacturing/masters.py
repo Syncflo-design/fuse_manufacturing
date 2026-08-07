@@ -9,8 +9,15 @@ Every function is idempotent: run it twice and the second run changes nothing.
 
 import frappe
 
-from fuse_manufacturing import gateway
+from fuse_manufacturing import gateway, rules
 from fuse_manufacturing.gateway import flag, number, val
+
+# The decision logic lives in rules.py, which imports no Frappe and is covered by tests
+# that run in a second without a site. Re-exported here so callers keep one import.
+NO_COST_SENTINEL = rules.NO_COST_SENTINEL
+SIGNATURE_VERSION = rules.SIGNATURE_VERSION
+MIN_FLOAT_PRECISION = rules.MIN_FLOAT_PRECISION
+MAX_FLOAT_PRECISION = rules.MAX_FLOAT_PRECISION
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Entities
@@ -575,6 +582,8 @@ def sync_items(modified_since=None):
 
 	created = updated = skipped = 0
 	missing_uoms = set()
+	# One read, not one per item per unit — this loop runs 2,600 times.
+	known_uoms = set(frappe.get_all("UOM", pluck="name", limit_page_length=0))
 
 	# Precision FIRST, before a single item is written.
 	#
@@ -590,7 +599,7 @@ def sync_items(modified_since=None):
 			continue
 
 		uom = val(row, "BASEUOM")
-		if uom and not frappe.db.exists("UOM", uom):
+		if uom and uom not in known_uoms:
 			# Never substitute a near-match: the wrong string is rejected at post time,
 			# so a silently mapped UOM would fail much later and much less obviously.
 			missing_uoms.add(uom)
@@ -624,8 +633,7 @@ def sync_items(modified_since=None):
 		# the BOM builds fine and only manufacturing fails, much later.
 		# A plain (non-stocked) "Kit" is assembled on the fly and holds no stock.
 		item_type = (val(row, "ITEMTYPE") or "").strip()
-		normalised = item_type.lower()
-		doc.is_stock_item = 1 if (normalised == "inventory" or "stockable kit" in normalised) else 0
+		doc.is_stock_item = 1 if rules.is_stock_item(item_type) else 0
 		doc.custom_intacct_item_type = item_type
 		if uom:
 			doc.stock_uom = uom
@@ -653,28 +661,15 @@ def sync_items(modified_since=None):
 		# Unit conversions. The stock unit is always 1; purchase and sales units carry
 		# Intacct's own factor. Rebuilt each run rather than appended, so a conversion
 		# removed in Intacct does not linger here and quietly mis-convert a receipt.
-		conversions = {}
-		if uom:
-			conversions[uom] = 1.0
-		for unit_field, factor_field in (
-			("UOM.POUOMDETAIL.UNIT", "UOM.POUOMDETAIL.CONVFACTOR"),
-			("UOM.SOUOMDETAIL.UNIT", "UOM.SOUOMDETAIL.CONVFACTOR"),
-		):
-			unit = val(row, unit_field)
-			factor = number(row, factor_field, 0)
-			if not unit or not factor:
-				continue
-			if not frappe.db.exists("UOM", unit):
-				missing_uoms.add(unit)
-				continue
-			# Never overwrite the stock unit's factor of 1.
-			if unit != uom:
-				conversions[unit] = factor
+		conversions, unknown = rules.build_conversions(
+			uom,
+			(val(row, "UOM.POUOMDETAIL.UNIT"), number(row, "UOM.POUOMDETAIL.CONVFACTOR", 0)),
+			(val(row, "UOM.SOUOMDETAIL.UNIT"), number(row, "UOM.SOUOMDETAIL.CONVFACTOR", 0)),
+			known_uoms,
+		)
+		missing_uoms.update(unknown)
 
-		# Only when the stock unit itself is present. ERPNext requires the stock UOM to
-		# appear in this table with a factor of 1; writing a purchase unit without it
-		# fails validation on every item that has no BASEUOM.
-		if uom and conversions:
+		if conversions:
 			doc.set(
 				"uoms",
 				[{"uom": u, "conversion_factor": f} for u, f in conversions.items()],
@@ -843,17 +838,6 @@ STOCK_FIELDS = ["ITEMID", "WAREHOUSEID", "WONHAND", "AVERAGE_COST", "LAST_COST"]
 # Observed on the first opening run at batch size 200 (all 10 documents left at draft).
 OPENING_STOCK_BATCH_SIZE = 100
 
-# Valuation used when Intacct holds no cost at all for an item. Same convention as the
-# POS price safety-net: never a plausible value, obvious in any report, and the exact
-# figure is the worklist — filter valuation rate = 0.01 to find every item still needing
-# a real cost in Intacct.
-NO_COST_SENTINEL = 0.01
-
-# Bump to force a full BOM rebuild on the next kits sync, when the reason is outside the
-# recipe itself. v2 = site float precision raised 3 → 4 to match Intacct's quantities.
-SIGNATURE_VERSION = "v2"
-
-
 def _read_intacct_stock(company):
 	"""Intacct's on-hand per item/warehouse, keyed to ERPNext names."""
 	rows = gateway.query("ITEMWAREHOUSEINFO", STOCK_FIELDS, company=company)
@@ -883,14 +867,7 @@ def _read_intacct_stock(company):
 		#
 		# 0.01 is deliberate. It is never a plausible cost, it is glaring in any report,
 		# and nothing else values at one cent. The visible wrongness IS the safeguard.
-		rate = number(row, "AVERAGE_COST", 0) or 0
-		source = "AVERAGE_COST"
-		if not rate:
-			rate = number(row, "LAST_COST", 0) or 0
-			source = "LAST_COST"
-		if not rate:
-			rate = NO_COST_SENTINEL
-			source = "sentinel"
+		rate, source = rules.choose_rate(number(row, "AVERAGE_COST", 0), number(row, "LAST_COST", 0))
 
 		balances[(item_code, warehouse)] = {
 			"qty": number(row, "WONHAND", 0) or 0,
@@ -1067,8 +1044,7 @@ def stock_drift_report(company=None):
 	# report: the one time it matters, nobody looks.
 	from frappe.utils import cint
 
-	precision = cint(frappe.db.get_default("float_precision")) or 3
-	tolerance = 10.0**-precision
+	precision = cint(frappe.db.get_default("float_precision")) or rules.MIN_FLOAT_PRECISION
 
 	drift = []
 	rounding_only = 0
@@ -1077,7 +1053,7 @@ def stock_drift_report(company=None):
 		intacct_qty = intacct.get(key, {}).get("qty", 0)
 		erp_qty = erp.get(key, 0)
 		difference = erp_qty - intacct_qty
-		if abs(difference) <= tolerance:
+		if not rules.is_drift(intacct_qty, erp_qty, precision):
 			if difference:
 				rounding_only += 1
 			continue
@@ -1095,7 +1071,7 @@ def stock_drift_report(company=None):
 	return {
 		"company": company,
 		"compared": len(set(intacct) | set(erp)),
-		"tolerance": tolerance,
+		"tolerance": 10.0**-precision,
 		"rounding_only": rounding_only,
 		"drift_count": len(drift),
 		"drift": drift[:200],
@@ -1161,31 +1137,11 @@ def sync_kits(company=None, rebuild=False):
 	# A kit can only be built once every kit it consumes has a BOM, so ERPNext links the
 	# sub-assembly instead of treating it as a raw part. Establish that order FIRST,
 	# without touching anything, because cancellation needs the exact reverse of it.
-	build_order = []
-	pending = [val(k, "ITEMID") for k in kits if val(k, "ITEMID") in by_kit]
-	placed = set()
-
-	while pending:
-		still_pending = []
-		for code in pending:
-			lines = by_kit.get(code, [])
-			blocked = any(
-				line["item_code"] in kit_codes and line["item_code"] not in placed
-				for line in lines
-			)
-			if blocked:
-				still_pending.append(code)
-			else:
-				build_order.append(code)
-				placed.add(code)
-
-		if len(still_pending) == len(pending):
-			# Circular recipe — a kit that ultimately contains itself. Intacct allows it
-			# to be saved; ERPNext cannot explode it and neither can a factory.
-			for code in still_pending:
-				skipped.append({"kit": code, "reason": "circular recipe"})
-			break
-		pending = still_pending
+	build_order, circular = rules.kit_build_order(kit_codes, by_kit)
+	for code in circular:
+		# A kit that ultimately contains itself. Intacct allows it to be saved; ERPNext
+		# cannot explode it and neither can a factory.
+		skipped.append({"kit": code, "reason": "circular recipe"})
 
 	# ── Pass 2: decide what to build, then clear what it replaces ───────────
 	to_build = {}
@@ -1302,26 +1258,7 @@ def rebuild_kits(company=None):
 	return sync_kits(company=company, rebuild=True)
 
 
-def _recipe_signature(lines):
-	"""Stable fingerprint of a recipe, for deciding whether anything actually changed.
-
-	Hashed, not stored raw. A real compound recipe runs to a dozen-plus components and
-	the readable form runs past 500 characters — well beyond a Data field. The value is
-	only ever compared for equality, never read, so a digest loses nothing.
-
-	Quantities are formatted to a fixed 6 decimals so 0.0085 and 0.00850000 do not
-	produce different fingerprints for the same recipe.
-	"""
-	import hashlib
-
-	readable = "|".join(
-		f"{line['item_code']}:{float(line['qty']):.6f}:{line['uom'] or ''}" for line in lines
-	)
-	# Bump SIGNATURE_VERSION to force every BOM to be rebuilt on the next kits sync —
-	# used when something OUTSIDE the recipe changes how a BOM is written. v2: site float
-	# precision moved 3 → 4 to match Intacct, and BOMs built at 3 had already lost a digit
-	# (0.0085 kg/kg was stored as 0.008 per unit — 8 kg instead of 8.5 on a 1,000 kg batch).
-	return hashlib.sha1(f"{SIGNATURE_VERSION}|{readable}".encode()).hexdigest()
+_recipe_signature = rules.recipe_signature
 
 
 def _build_bom(kit_code, lines, company):
@@ -1661,34 +1598,30 @@ def align_float_precision(seen_precisions):
 	"""
 	from frappe.utils import cint
 
-	wanted = max([cint(p) for p in seen_precisions if cint(p)] or [0])
-	if not wanted:
-		return {"changed": False, "reason": "Intacct returned no INV_PRECISION values"}
+	current = cint(frappe.db.get_single_value("System Settings", "float_precision"))
+	decision = rules.decide_precision(seen_precisions, current)
 
-	wanted = max(MIN_FLOAT_PRECISION, min(wanted, MAX_FLOAT_PRECISION))
-	current = cint(frappe.db.get_single_value("System Settings", "float_precision")) or 3
+	if decision["action"] == "none":
+		return {"changed": False, **{k: v for k, v in decision.items() if k != "action"}}
 
-	if wanted == current:
-		return {"changed": False, "precision": current}
-
-	if wanted < current:
+	if decision["action"] == "warn":
 		return {
 			"changed": False,
-			"precision": current,
-			"intacct_precision": wanted,
+			"precision": decision["precision"],
+			"intacct_precision": decision["intacct_precision"],
 			"warning": (
-				f"Intacct's precision ({wanted}) is LOWER than ERPNext's ({current}). "
-				"Not lowered automatically — that would round every quantity already stored. "
-				"Change it deliberately if that is really what you want."
+				f"Intacct's precision ({decision['intacct_precision']}) is LOWER than "
+				f"ERPNext's ({decision['precision']}). Not lowered automatically — that "
+				"would round every quantity already stored."
 			),
 		}
 
-	frappe.db.set_single_value("System Settings", "float_precision", str(wanted))
+	frappe.db.set_single_value("System Settings", "float_precision", str(decision["to"]))
 	frappe.clear_cache()
 	return {
 		"changed": True,
-		"from": current,
-		"to": wanted,
+		"from": decision["from"],
+		"to": decision["to"],
 		"note": "Records written before this change keep their old rounding — re-import to rebuild them.",
 	}
 
