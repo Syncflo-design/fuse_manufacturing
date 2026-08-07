@@ -466,6 +466,12 @@ STOCK_FIELDS = ["ITEMID", "WAREHOUSEID", "WONHAND", "AVERAGE_COST", "LAST_COST"]
 # Observed on the first opening run at batch size 200 (all 10 documents left at draft).
 OPENING_STOCK_BATCH_SIZE = 100
 
+# Valuation used when Intacct holds no cost at all for an item. Same convention as the
+# POS price safety-net: never a plausible value, obvious in any report, and the exact
+# figure is the worklist — filter valuation rate = 0.01 to find every item still needing
+# a real cost in Intacct.
+NO_COST_SENTINEL = 0.01
+
 
 def _read_intacct_stock(company):
 	"""Intacct's on-hand per item/warehouse, keyed to ERPNext names."""
@@ -486,9 +492,29 @@ def _read_intacct_stock(company):
 		warehouse = warehouses.get(val(row, "WAREHOUSEID"))
 		if not item_code or not warehouse:
 			continue
+		# AVERAGE_COST first, LAST_COST as fallback, then a sentinel.
+		#
+		# ERPNext refuses to submit a stock line with no valuation rate, so a zero-cost
+		# item would otherwise be dropped and its quantity silently lost. Bringing the
+		# stock in at NO_COST_SENTINEL keeps the quantity — which is the thing the
+		# factory actually needs — and makes the missing cost findable rather than
+		# invisible: filter valuation rate = 0.01 and you have the exact worklist.
+		#
+		# 0.01 is deliberate. It is never a plausible cost, it is glaring in any report,
+		# and nothing else values at one cent. The visible wrongness IS the safeguard.
+		rate = number(row, "AVERAGE_COST", 0) or 0
+		source = "AVERAGE_COST"
+		if not rate:
+			rate = number(row, "LAST_COST", 0) or 0
+			source = "LAST_COST"
+		if not rate:
+			rate = NO_COST_SENTINEL
+			source = "sentinel"
+
 		balances[(item_code, warehouse)] = {
 			"qty": number(row, "WONHAND", 0) or 0,
-			"rate": number(row, "AVERAGE_COST", 0) or 0,
+			"rate": rate,
+			"rate_source": source,
 		}
 	return balances
 
@@ -518,6 +544,7 @@ def post_opening_stock(company=None):
 
 	rows = []
 	skipped = []
+	no_cost = []
 
 	for (item_code, warehouse), balance in sorted(balances.items()):
 		if balance["qty"] <= 0:
@@ -537,6 +564,9 @@ def post_opening_stock(company=None):
 			# tracking data, so they are reported and left for a deliberate decision.
 			skipped.append({"item": item_code, "warehouse": warehouse, "reason": "batch or serial tracked"})
 			continue
+
+		if balance.get("rate_source") == "sentinel":
+			no_cost.append({"item": item_code, "warehouse": warehouse, "qty": balance["qty"]})
 
 		rows.append(
 			{
@@ -585,6 +615,9 @@ def post_opening_stock(company=None):
 		"batches": len(documents),
 		"skipped_count": len(skipped),
 		"skipped": skipped[:200],
+		"no_cost_count": len(no_cost),
+		"no_cost_sample": no_cost[:100],
+		"no_cost_note": f"Opened at {NO_COST_SENTINEL} — filter Bin valuation rate = {NO_COST_SENTINEL} for the full list.",
 	}
 
 
