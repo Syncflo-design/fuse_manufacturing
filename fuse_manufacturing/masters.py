@@ -710,8 +710,21 @@ def sync_kits(company=None):
 
 
 def _recipe_signature(lines):
-	"""Stable fingerprint of a recipe, for deciding whether anything actually changed."""
-	return "|".join(f"{line['item_code']}:{float(line['qty']):.6f}:{line['uom'] or ''}" for line in lines)
+	"""Stable fingerprint of a recipe, for deciding whether anything actually changed.
+
+	Hashed, not stored raw. A real compound recipe runs to a dozen-plus components and
+	the readable form runs past 500 characters — well beyond a Data field. The value is
+	only ever compared for equality, never read, so a digest loses nothing.
+
+	Quantities are formatted to a fixed 6 decimals so 0.0085 and 0.00850000 do not
+	produce different fingerprints for the same recipe.
+	"""
+	import hashlib
+
+	readable = "|".join(
+		f"{line['item_code']}:{float(line['qty']):.6f}:{line['uom'] or ''}" for line in lines
+	)
+	return hashlib.sha1(readable.encode("utf-8")).hexdigest()
 
 
 def _build_bom(kit_code, lines, company):

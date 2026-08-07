@@ -107,7 +107,7 @@ CUSTOM_FIELDS = {
 			"read_only": 1,
 			"hidden": 1,
 			"allow_on_submit": 1,
-			"description": "Fingerprint of the Intacct kit recipe this BOM was built from. Lets the sync tell a changed recipe from an unchanged one, so it does not cancel and rebuild every BOM on every run.",
+			"description": "SHA1 of the Intacct kit recipe this BOM was built from. Lets the sync tell a changed recipe from an unchanged one, so it does not cancel and rebuild every BOM on every run. Hashed because a real compound recipe runs well past a Data field's 140 characters.",
 		},
 	],
 	"Company": [

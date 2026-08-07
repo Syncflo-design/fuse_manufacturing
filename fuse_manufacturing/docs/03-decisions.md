@@ -94,6 +94,27 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-07 — Build for lot, serial and bin tracking even though Leadertread has them off
+
+**Context:** Leadertread runs with lot tracking, serial tracking and bin tracking all
+switched off. Other clients will use them, and Leadertread may switch them on later.
+
+**Decision:** Every posting, screen and sync is written to handle tracked items from the
+start. Not "add it later" — the code paths exist and are exercised, even if Leadertread's
+own data never hits them.
+
+**Why:** tracked stock is not a variation on untracked stock, it is a different shape —
+a movement carries lot or serial identity per line, and ERPNext refuses to change an
+item's tracking flags once movements exist against it. Retrofitting means unpicking
+history, not adding a branch.
+
+**Consequences:**
+- Never assume a movement can be posted from a warehouse total alone.
+- `post_opening_stock` already skips tracked items and reports them, rather than inventing
+  lot numbers. That stays the pattern: refuse and report, never guess.
+- DEV's own test data DOES have lot, serial and bin tracked items (CSS1001, CSS1003–1005).
+  That is a useful accident — it exercises the paths Leadertread's data will not.
+
 ## 2026-08-06 — Substitution via Item Alternative, approved per pairing
 
 **Context:** Leadertread substitutes a raw material when one is unavailable, and a
@@ -312,14 +333,21 @@ desk form and the scanner page both call the same function.
 
 ## 2026-08-06 — Point at `leadertread-DEV`
 
-**Decision:** The Leadertread ERPNext site's Intacct Settings target the **DEV** company,
-not `leadertread-imp`.
+**Decision:** The Leadertread ERPNext site's Intacct Settings target the **DEV** company
+first. `leadertread-imp` is the **final testing** instance — not production — and the
+connection moves there for transaction tests once DEV is proven.
 **Why:** the posting layer has to be proven — production run, goods receipt, warehouse
 transfer, stock adjustment, all correctly costed — without touching the live company.
-**Consequences:** a dev company's configuration drifts from live, so the live company's
-transaction definitions must be re-read before any go-live date is committed. The entity
-ID must also be confirmed against DEV: the donor's `E100` was set alongside the live
-company block and is not verified to exist in DEV.
+**Consequences:**
+- Configuration drifts between companies, so each one's transaction definitions must be
+  re-read on arrival — DEV's are not evidence for imp's, and imp's are not evidence for
+  production's.
+- **The entity ID differs per company:** DEV is `100`, imp is `E100`. Confirmed on
+  2026-08-06 — the donor's `E100` did not exist in DEV, and the resulting failure was
+  `XL03000006`, which reads as a credentials error rather than an entity one. Switching
+  companies means changing the entity too.
+- DEV's units are `Each` and `Ounce`, not the SA English set (`Cubic metres`, `Kilograms`)
+  seen on the donor's company. Do not treat DEV data as representative.
 
 ## 2026-08-06 — 1 client = 1 ERPNext instance = 1 Intacct company
 

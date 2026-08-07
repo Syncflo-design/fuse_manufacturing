@@ -100,8 +100,15 @@ Verified by reading the source, not assumed.
 - The SDK path does **login-per-request** — no session handling. The raw-gateway path caches a
   session for 20 min (sessions idle out ~1 hr). Re-logging in per call turned one kit import
   into 16 logins.
-- `EntityId = E100`. Live company is `leadertread-imp` / user `leadertread_api`;
-  `leadertread-DEV` / `syncflo` is present but **commented out**.
+- Two Intacct companies are in play, **neither of them live**:
+  - **`leadertread-DEV`** — the sandbox. Masters and postings are proven here first.
+    Its entity is **`100`** (confirmed by `LOCATIONENTITY` on 2026-08-06).
+  - **`leadertread-imp`** — the **final testing** instance. Transaction tests move here
+    once DEV is proven. The donor app's config points at it, with entity `E100`.
+- **The entity ID differs between the two companies** — `100` on DEV, `E100` on imp.
+  Switching the connection is a Settings change, no code, but the entity must change with
+  it. Get it wrong and the login fails outright; DEV's own entity was wrong at first setup
+  and produced `XL03000006`, which reads like a credentials problem rather than an entity one.
 - Connection cap: ASP.NET pinned the host to 2 connections and the kit import (~32 calls) died
   with "A task was canceled". Raised to 24. **Python won't have this bug** — but the underlying
   Intacct-side concurrency limit still applies.
