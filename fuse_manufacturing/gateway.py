@@ -108,6 +108,14 @@ def _log_request(*, function_name, control_id, request_xml, response_xml, status
 		doc.request_xml = _redact(request_xml or "")[:100000]
 		doc.response_xml = (response_xml or "")[:100000]
 		doc.insert(ignore_permissions=True)
+		# Commit the log entry on its own.
+		#
+		# Without this the log is worthless exactly when it matters: a failed post raises,
+		# Frappe rolls the transaction back, and the log row rolls back with it. The one
+		# record you need to explain what happened disappears because what happened was a
+		# failure. Committing here keeps the audit trail independent of the outcome it
+		# describes.
+		frappe.db.commit()
 	except Exception:
 		frappe.log_error(title="Intacct request log write failed", message=frappe.get_traceback())
 
@@ -136,14 +144,24 @@ def _is_transient(exc):
 	)
 
 
-def _post(cfg, request_element):
+def _post(cfg, request_element, retry=True):
 	"""POST one <request> and return the parsed response root.
 
-	Retries transient failures with backoff. A single dropped connection in a
-	several-hundred-call import must not fail the whole run.
+	`retry=True` for READS: a dropped connection in a several-hundred-page import must
+	not fail the whole run, and re-reading is free.
+
+	`retry=False` for WRITES. A write that times out is AMBIGUOUS — Intacct may have
+	committed it. Retrying is not safe in the way it looks:
+	  - if Intacct did not commit, the retry works;
+	  - if Intacct DID commit, the deterministic control ID means the replay is rejected,
+	    and that rejection surfaces as a failure. The operator is then told the posting
+	    failed when the stock actually moved, and re-does it by hand.
+	The honest behaviour is to surface the timeout, record the request in the log, and
+	let a human check Intacct. The control ID still protects against a double-post if
+	they resubmit.
 	"""
 	body = b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(request_element, encoding="utf-8")
-	attempts = cfg.max_attempts or 3
+	attempts = (cfg.max_attempts or 3) if retry else 1
 	last = None
 
 	for attempt in range(1, attempts + 1):
@@ -426,19 +444,27 @@ def execute_many(function_elements, entity_id=None, company=None, reference=None
 	if not function_elements:
 		return []
 
+	# A write with no reference gets a random control ID and no replay protection —
+	# a silent downgrade of the one safeguard that stops duplicate stock. Required, not
+	# optional: if a posting has no ERPNext document behind it, that is the bug.
+	if not reference or len(reference) != 2 or not all(reference):
+		frappe.throw(
+			"execute_many needs reference=(doctype, name) — the ERPNext document this "
+			"posting belongs to. It drives the deterministic control ID that makes a "
+			"replay safe, and ties the request log back to the document."
+		)
+
 	cfg = settings()
 	_require_enabled(cfg)
 	entity = entity_id or entity_for_company(company)
 	session_id = login(entity_id=entity, company=company)
 
-	control_id = (
-		control_id_for(reference[0], reference[1], purpose) if reference else str(uuid.uuid4())
-	)
+	control_id = control_id_for(reference[0], reference[1], purpose)
 
 	request = ET.Element("request")
 	# uniqueid=true is what makes the deterministic control ID mean anything: Intacct
 	# refuses a second request carrying a control ID it has already processed.
-	request.append(_control(cfg, control_id=control_id, unique=bool(reference)))
+	request.append(_control(cfg, control_id=control_id, unique=True))
 	operation = ET.SubElement(request, "operation")
 	if atomic and len(function_elements) > 1:
 		operation.set("transaction", "true")
@@ -456,7 +482,7 @@ def execute_many(function_elements, entity_id=None, company=None, reference=None
 	started = time.time()
 
 	try:
-		root = _check_result(_post(cfg, request))
+		root = _check_result(_post(cfg, request, retry=False))
 	except Exception as exc:
 		_log_request(
 			function_name=function_name,
@@ -472,6 +498,12 @@ def execute_many(function_elements, entity_id=None, company=None, reference=None
 		raise
 
 	keys = [el.text for el in root.iter("key")]
+	if len(keys) < len(function_elements):
+		# Pad rather than let positions shift: caller indexes these against the functions
+		# it sent, and a silently shortened list would attribute one function's key to
+		# another.
+		keys = keys + [None] * (len(function_elements) - len(keys))
+
 	_log_request(
 		function_name=function_name,
 		control_id=control_id,
@@ -483,7 +515,7 @@ def execute_many(function_elements, entity_id=None, company=None, reference=None
 		entity_id=entity,
 		intacct_key=keys[0] if keys else None,
 	)
-	return keys or [None] * len(function_elements)
+	return keys
 
 
 # ──────────────────────────────────────────────────────────────────────────────

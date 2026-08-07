@@ -1079,8 +1079,13 @@ def _sync_items_incremental(company=None):
 	last = frappe.db.get_single_value("Intacct Settings", "last_item_sync")
 	since = None
 	if last:
-		since = add_to_date(get_datetime(last), hours=-ITEM_SYNC_OVERLAP_HOURS)
-		since = since.strftime("%m/%d/%Y %H:%M:%S")
+		# A cleared watermark can come back as something that parses to year 1, and
+		# subtracting the overlap from that overflows — which crashed this job every
+		# hour until it was noticed. Anything implausible means "no watermark", so fall
+		# back to a full read rather than failing.
+		parsed = get_datetime(last)
+		if parsed and parsed.year >= 2000:
+			since = add_to_date(parsed, hours=-ITEM_SYNC_OVERLAP_HOURS).strftime("%m/%d/%Y %H:%M:%S")
 
 	started = now_datetime()
 	result = sync_items(modified_since=since)
