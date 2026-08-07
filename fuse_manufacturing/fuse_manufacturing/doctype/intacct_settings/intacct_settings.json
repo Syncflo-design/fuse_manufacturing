@@ -112,11 +112,11 @@
    "label": "Tuning"
   },
   {
-   "default": "1000",
+   "default": "500",
    "fieldname": "page_size",
    "fieldtype": "Int",
    "label": "Query Page Size",
-   "description": "Intacct guidance is to keep queries under about 1000 records."
+   "description": "Intacct guidance is to keep queries UNDER about 1000 records, so the default sits below the ceiling rather than on it. More pages costs time, not concurrency — and time is cheap here."
   },
   {
    "fieldname": "column_break_tuning",

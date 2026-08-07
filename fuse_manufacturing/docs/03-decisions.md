@@ -94,6 +94,39 @@ Permission Manager changes) is invisible to git, does not deploy, and is lost on
 Rule: **if it is behaviour, it ships in `fuse_manufacturing` as code or as a fixture.**
 Site-side scripting is for spikes only, and gets migrated into the app before it counts as done.
 
+## 2026-08-07 — Request log, deterministic control IDs, atomic multi-leg posts
+
+Three things done together because they share one code path, and all three must exist
+**before anything posts to a real company**.
+
+**1. `Intacct Request Log`.** Every write is recorded: function, control ID, ERPNext
+document, entity, duration, HTTP status, Intacct key, and the full request/response XML.
+Reads are logged **only when they fail** — logging every successful page would make this
+the largest table on the site during a masters sync, for no diagnostic value.
+- **Credentials are redacted before storage** (`<password>`, `<sessionid>`). The login
+  envelope carries both the sender and user password in clear; an unredacted log is a
+  credential store. Verified by test, not assumed.
+- No role has create or write. An audit trail someone can edit is not an audit trail.
+- Logging never raises — a logging failure must not fail the posting it describes.
+
+**2. Deterministic control IDs + `<uniqueid>true</uniqueid>`.** Derived from the ERPNext
+document via `control_id_for(doctype, name, purpose)`, so it is reproducible from the
+document rather than stored and hoped for.
+
+**Why this is non-negotiable:** `_post` retries on timeout. A request that times out
+*after* Intacct committed it would be retried and post the movement twice. With a
+deterministic control ID and uniqueid set, Intacct rejects the replay. Without it, the
+retry logic is a stock-duplication machine. It is harmless today only because nothing
+posts yet.
+
+**3. `execute_many(..., atomic=True)`** wraps multiple functions in
+`<operation transaction="true">` so Intacct commits all or none. This closes the donor's
+put-away hole *by construction*: it posted the Out leg, and if the In leg failed the
+stock had left the bay and arrived nowhere, with only a message telling someone to go and
+fix it by hand in Intacct. Every leg of one movement goes in a single call.
+
+**Still outstanding:** no automated tests, and the reversal/cancellation design.
+
 ## 2026-08-07 — Build for lot, serial and bin tracking even though Leadertread has them off
 
 **Context:** Leadertread runs with lot tracking, serial tracking and bin tracking all

@@ -17,7 +17,6 @@ from fuse_manufacturing.gateway import flag, number, val
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@frappe.whitelist()
 def list_entities():
 	"""Every active entity in the Intacct company — E100, E200 and so on.
 
@@ -73,7 +72,6 @@ WAREHOUSE_FIELDS = [
 ]
 
 
-@frappe.whitelist()
 def sync_warehouses(company=None):
 	"""Intacct WAREHOUSE → ERPNext Warehouse.
 
@@ -192,7 +190,6 @@ BIN_FIELDS = [
 ]
 
 
-@frappe.whitelist()
 def sync_bins(company=None):
 	"""Intacct BIN → Intacct Bin records, one per bin. A mirror, nothing more.
 
@@ -293,7 +290,6 @@ def sync_bins(company=None):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@frappe.whitelist()
 def sync_uoms():
 	"""Create every unit string Intacct uses on items, spelled exactly as Intacct spells it.
 
@@ -343,7 +339,6 @@ ITEM_FIELDS = [
 ]
 
 
-@frappe.whitelist()
 def sync_items(modified_since=None):
 	"""Intacct ITEM → ERPNext Item. Identity only.
 
@@ -462,6 +457,10 @@ def sync_items(modified_since=None):
 # on the ITEM object at all, so cost arrives here, per warehouse, or not at all.
 STOCK_FIELDS = ["ITEMID", "WAREHOUSEID", "WONHAND", "AVERAGE_COST", "LAST_COST"]
 
+# Rows per opening Stock Reconciliation. Small enough that one document saves and submits
+# comfortably, large enough not to produce hundreds of documents.
+OPENING_STOCK_BATCH_SIZE = 200
+
 
 def _read_intacct_stock(company):
 	"""Intacct's on-hand per item/warehouse, keyed to ERPNext names."""
@@ -489,7 +488,6 @@ def _read_intacct_stock(company):
 	return balances
 
 
-@frappe.whitelist()
 def post_opening_stock(company=None):
 	"""Post Intacct's on-hand into ERPNext ONCE, as an opening Stock Reconciliation.
 
@@ -513,12 +511,8 @@ def post_opening_stock(company=None):
 
 	balances = _read_intacct_stock(company)
 
-	doc = frappe.new_doc("Stock Reconciliation")
-	doc.company = company
-	doc.purpose = "Opening Stock"
-
+	rows = []
 	skipped = []
-	posted = 0
 
 	for (item_code, warehouse), balance in sorted(balances.items()):
 		if balance["qty"] <= 0:
@@ -539,28 +533,47 @@ def post_opening_stock(company=None):
 			skipped.append({"item": item_code, "warehouse": warehouse, "reason": "batch or serial tracked"})
 			continue
 
-		doc.append(
-			"items",
+		rows.append(
 			{
 				"item_code": item_code,
 				"warehouse": warehouse,
 				"qty": balance["qty"],
 				"valuation_rate": balance["rate"],
-			},
+			}
 		)
-		posted += 1
 
-	if not posted:
+	if not rows:
 		return {"posted": 0, "skipped": skipped, "note": "Nothing to open."}
 
-	doc.insert(ignore_permissions=True)
-	doc.submit()
-	frappe.db.commit()
+	# Batched, NOT one document. Leadertread has ~2,600 items across 53 warehouses, so a
+	# single Stock Reconciliation could carry tens of thousands of rows — one enormous
+	# transaction that times out, and if it fails at row 40,000 the whole opening is lost.
+	# Batches also mean a failure is diagnosable: you know which slice broke.
+	documents = []
+	for start in range(0, len(rows), OPENING_STOCK_BATCH_SIZE):
+		batch = rows[start : start + OPENING_STOCK_BATCH_SIZE]
+		doc = frappe.new_doc("Stock Reconciliation")
+		doc.company = company
+		doc.purpose = "Opening Stock"
+		for row in batch:
+			doc.append("items", row)
+		doc.insert(ignore_permissions=True)
+		doc.submit()
+		# Commit per batch so an interruption keeps the batches already posted. This is
+		# a once-only operation and re-running is blocked by the stock-movement guard,
+		# so partial progress must survive rather than roll back.
+		frappe.db.commit()
+		documents.append(doc.name)
 
-	return {"stock_reconciliation": doc.name, "posted": posted, "skipped": skipped}
+	return {
+		"stock_reconciliations": documents,
+		"posted": len(rows),
+		"batches": len(documents),
+		"skipped_count": len(skipped),
+		"skipped": skipped[:200],
+	}
 
 
-@frappe.whitelist()
 def stock_drift_report(company=None):
 	"""Compare ERPNext's on-hand against Intacct's. Read-only — corrects nothing.
 
@@ -603,7 +616,6 @@ def stock_drift_report(company=None):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@frappe.whitelist()
 def sync_kits(company=None):
 	"""Intacct kits → ERPNext BOMs.
 
@@ -801,7 +813,6 @@ def _build_bom(kit_code, lines, company):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@frappe.whitelist()
 def sync_all(company=None):
 	"""Full masters pull, in dependency order."""
 	return {
@@ -822,7 +833,33 @@ def sync_all(company=None):
 # and submit per BOM. Run it on the long queue and read the result off Intacct Settings.
 # ──────────────────────────────────────────────────────────────────────────────
 
+# The ONLY two ways to run a sync are enqueue_sync and run_now, both of which take the
+# lock. The individual sync functions are deliberately NOT whitelisted: a direct API call
+# to sync_items would open its own gateway session alongside whatever else is running and
+# walk straight past the concurrency guard.
+def _lock_busy_exceptions():
+	"""Whatever this install raises when a filelock is already held.
+
+	Named explicitly rather than assumed: Frappe wraps the `filelock` package and the
+	exception has moved between versions. Catching the wrong class means the guard looks
+	present in the code and does nothing at runtime — the worst kind of safety check.
+	"""
+	found = [TimeoutError]
+	if hasattr(frappe, "LockTimeoutError"):
+		found.append(frappe.LockTimeoutError)
+	try:
+		from filelock import Timeout
+
+		found.append(Timeout)
+	except ImportError:
+		pass
+	return tuple(found)
+
+
+_LOCK_BUSY = _lock_busy_exceptions()
+
 JOBS = {
+	"entities": "list_entities",
 	"warehouses": "sync_warehouses",
 	"uoms": "sync_uoms",
 	"items": "sync_items",
@@ -857,6 +894,18 @@ def enqueue_sync(job, company=None):
 	return {"queued": job}
 
 
+@frappe.whitelist()
+def run_now(job, company=None):
+	"""Run one sync immediately, still behind the lock.
+
+	For the small, quick ones — entities, uoms, drift. Anything that touches the full
+	item or component master belongs on the queue: it will not fit in a web request.
+	"""
+	if job not in JOBS:
+		frappe.throw(f"Unknown job '{job}'. One of: {', '.join(sorted(JOBS))}")
+	return run_sync(job, company=company)
+
+
 def run_sync(job, company=None):
 	"""Run a named sync and record the outcome. Called by the queue, not directly.
 
@@ -879,9 +928,9 @@ def run_sync(job, company=None):
 		with filelock("fuse_intacct_sync", timeout=1):
 			try:
 				fn = globals()[JOBS[job]]
-				# sync_uoms is the only one with no company argument — UOMs are shared
-				# across the whole Intacct company, not held per entity.
-				result = fn() if job == "uoms" else fn(company=company)
+				# sync_uoms and list_entities take no company — UOMs are shared across
+				# the whole Intacct company, and entities ARE the list of companies.
+				result = fn() if job in ("uoms", "entities") else fn(company=company)
 				payload = {"job": job, "status": "ok", "result": result}
 			except Exception:
 				# Record the failure where it can be read, then re-raise so it also
@@ -889,7 +938,7 @@ def run_sync(job, company=None):
 				payload = {"job": job, "status": "failed", "error": traceback.format_exc()[-2000:]}
 				_record_sync_result(payload, started)
 				raise
-	except frappe.LockTimeoutError:
+	except _LOCK_BUSY:
 		payload = {
 			"job": job,
 			"status": "skipped",

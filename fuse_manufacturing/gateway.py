@@ -10,6 +10,8 @@ The constraints encoded below were learned the hard way on the donor app. See
 docs/02-intacct-integration.md before changing any of them.
 """
 
+import hashlib
+import re
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -40,15 +42,83 @@ def _require_enabled(cfg):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _control(cfg, unique=False):
-	"""The <control> block every request carries."""
+def control_id_for(doctype, name, purpose=""):
+	"""A control ID that is the SAME every time for the same piece of work.
+
+	This is what makes a retry safe. If a request times out AFTER Intacct committed it,
+	the retry carries the same control ID and — with <uniqueid>true</uniqueid> — Intacct
+	rejects the replay instead of posting the movement twice. Without it, the retry
+	logic in _post is a stock-duplication machine.
+
+	Derived from the ERPNext document, so it is reproducible from the document alone
+	rather than stored and hoped for.
+	"""
+	raw = f"{doctype}:{name}:{purpose}".strip(":")
+	# Intacct accepts a generous control ID, but keep it short, printable and stable.
+	digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+	return f"fuse-{digest}"
+
+
+def _control(cfg, control_id=None, unique=False):
+	"""The <control> block every request carries.
+
+	`unique=True` tells Intacct to enforce control-ID uniqueness — pair it with a
+	deterministic control_id on every write.
+	"""
 	control = ET.Element("control")
 	ET.SubElement(control, "senderid").text = cfg.sender_id
 	ET.SubElement(control, "password").text = cfg.get_password("sender_password")
-	ET.SubElement(control, "controlid").text = str(uuid.uuid4())
+	ET.SubElement(control, "controlid").text = control_id or str(uuid.uuid4())
 	ET.SubElement(control, "uniqueid").text = "true" if unique else "false"
 	ET.SubElement(control, "dtdversion").text = "3.0"
 	return control
+
+
+# Elements whose text is a credential. Redacted before anything is written to the log —
+# the request XML carries both the sender password and the user password in clear.
+_SECRET_TAGS = ("password", "senderpassword", "userpassword", "sessionid")
+
+
+def _redact(xml_text):
+	"""Strip credentials out of XML before it is stored or shown."""
+	for tag in _SECRET_TAGS:
+		xml_text = re.sub(
+			rf"<{tag}>.*?</{tag}>", f"<{tag}>***</{tag}>", xml_text, flags=re.IGNORECASE | re.DOTALL
+		)
+	return xml_text
+
+
+def _log_request(*, function_name, control_id, request_xml, response_xml, status, http_status=None,
+                 duration_ms=None, attempt=1, error=None, reference=None, entity_id=None,
+                 intacct_key=None):
+	"""Record one request. Never raises — a logging failure must not fail the post."""
+	try:
+		doc = frappe.new_doc("Intacct Request Log")
+		doc.function_name = (function_name or "")[:140]
+		doc.control_id = (control_id or "")[:140]
+		doc.status = status
+		doc.http_status = http_status
+		doc.duration_ms = duration_ms
+		doc.attempt = attempt
+		doc.entity_id = entity_id
+		doc.intacct_key = intacct_key
+		doc.error = (error or "")[:2000] or None
+		if reference:
+			doc.reference_doctype, doc.reference_name = reference
+		doc.request_xml = _redact(request_xml or "")[:100000]
+		doc.response_xml = (response_xml or "")[:100000]
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(title="Intacct request log write failed", message=frappe.get_traceback())
+
+
+def _retry_after_seconds(response):
+	"""Seconds to wait from a Retry-After header, if the server sent a usable one."""
+	value = (response.headers.get("Retry-After") or "").strip()
+	if not value.isdigit():
+		return None
+	# Cap it: a pathological header should not park a background job for an hour.
+	return min(int(value), 120)
 
 
 def _is_transient(exc):
@@ -84,7 +154,16 @@ def _post(cfg, request_element):
 				headers={"Content-Type": "application/xml"},
 				timeout=cfg.timeout or 300,
 			)
-			if response.status_code >= 500 or response.status_code == 429:
+			if response.status_code == 429:
+				# Rate limited. Honour Retry-After when Intacct sends one rather than
+				# guessing — backing off too little on a rate limit is how you turn a
+				# pause into a block.
+				wait = _retry_after_seconds(response) or (10 * attempt)
+				if attempt < attempts:
+					time.sleep(wait)
+					continue
+				raise RuntimeError(f"Intacct gateway returned 429 after {attempts} attempts")
+			if response.status_code >= 500:
 				raise RuntimeError(f"Intacct gateway returned {response.status_code}")
 			if response.status_code >= 400:
 				# Genuine rejection — surface it, do not retry.
@@ -222,7 +301,9 @@ def query(object_name, fields, filter_xml=None, page_size=None, entity_id=None, 
 	cfg = settings()
 	_require_enabled(cfg)
 	session_id = login(entity_id=entity_id, company=company)
-	size = page_size or cfg.page_size or 1000
+	# Hard ceiling regardless of what Settings says. Intacct's guidance is UNDER ~1000;
+	# a mis-set field must not be able to push past it.
+	size = min(page_size or cfg.page_size or 500, 1000)
 
 	rows = []
 	offset = 0
@@ -249,7 +330,23 @@ def query(object_name, fields, filter_xml=None, page_size=None, entity_id=None, 
 		ET.SubElement(query_el, "pagesize").text = str(size)
 		ET.SubElement(query_el, "offset").text = str(offset)
 
-		root = _check_result(_post(cfg, request))
+		try:
+			root = _check_result(_post(cfg, request))
+		except Exception as exc:
+			# Reads are logged only when they FAIL. Logging every successful page would
+			# make this table the largest on the site during a masters sync — hundreds
+			# of pages of no diagnostic value. A failed read is exactly what you need.
+			_log_request(
+				function_name=f"query {object_name}",
+				control_id=None,
+				request_xml=ET.tostring(request, encoding="unicode"),
+				response_xml=None,
+				status="Failed",
+				error=str(exc),
+				entity_id=entity_id,
+			)
+			raise
+
 		data = root.find(".//data")
 		if data is None:
 			break
@@ -302,26 +399,91 @@ def lookup(object_name, company=None):
 	}
 
 
-def execute(function_element, entity_id=None, company=None):
-	"""Post one write function (create/update/delete) and return the affected key.
+def execute(function_element, entity_id=None, company=None, reference=None, purpose=""):
+	"""Post ONE write function and return the affected key.
 
-	Pass the ERPNext company (or the entity directly) so the session is opened against
-	the right entity. Posting into the wrong entity is not an error Intacct will catch
-	for you — it will succeed, in the wrong place.
-
-	Deliberately one function per call. Multi-record posts that must succeed or fail
-	together need <operation transaction="true"> — add that when a caller genuinely
-	needs it, not before.
+	`reference` is (doctype, name) of the ERPNext document this posting belongs to. It
+	drives the deterministic control ID and ties the log entry back to the document, so
+	pass it for anything real.
 	"""
+	return execute_many(
+		[function_element], entity_id=entity_id, company=company, reference=reference, purpose=purpose
+	)[0]
+
+
+def execute_many(function_elements, entity_id=None, company=None, reference=None, purpose="",
+                 atomic=True):
+	"""Post several write functions as ONE unit of work.
+
+	`atomic=True` wraps them in <operation transaction="true"> so Intacct commits all of
+	them or none. This is what closes the partial-failure hole the donor lived with: a
+	put-away posted its Out leg, and if the In leg failed the stock had left the bay and
+	arrived nowhere, with only a message telling someone to go and fix it by hand.
+
+	Every leg of one movement belongs in a single call. Do not post legs separately and
+	hope.
+	"""
+	if not function_elements:
+		return []
+
 	cfg = settings()
 	_require_enabled(cfg)
-	session_id = login(entity_id=entity_id, company=company)
+	entity = entity_id or entity_for_company(company)
+	session_id = login(entity_id=entity, company=company)
 
-	request, content = _request_with_session(cfg, session_id)
-	content.append(function_element)
+	control_id = (
+		control_id_for(reference[0], reference[1], purpose) if reference else str(uuid.uuid4())
+	)
 
-	root = _check_result(_post(cfg, request))
-	return root.findtext(".//key")
+	request = ET.Element("request")
+	# uniqueid=true is what makes the deterministic control ID mean anything: Intacct
+	# refuses a second request carrying a control ID it has already processed.
+	request.append(_control(cfg, control_id=control_id, unique=bool(reference)))
+	operation = ET.SubElement(request, "operation")
+	if atomic and len(function_elements) > 1:
+		operation.set("transaction", "true")
+	authentication = ET.SubElement(operation, "authentication")
+	ET.SubElement(authentication, "sessionid").text = session_id
+	content = ET.SubElement(operation, "content")
+
+	names = []
+	for index, function_element in enumerate(function_elements, start=1):
+		function_element.set("controlid", f"{control_id}-{index}")
+		content.append(function_element)
+		names.append(next(iter(function_element), ET.Element("?")).tag)
+
+	function_name = ",".join(sorted(set(names)))[:140]
+	started = time.time()
+
+	try:
+		root = _check_result(_post(cfg, request))
+	except Exception as exc:
+		_log_request(
+			function_name=function_name,
+			control_id=control_id,
+			request_xml=ET.tostring(request, encoding="unicode"),
+			response_xml=None,
+			status="Failed",
+			duration_ms=int((time.time() - started) * 1000),
+			error=str(exc),
+			reference=reference,
+			entity_id=entity,
+		)
+		raise
+
+	keys = [el.text for el in root.iter("key")]
+	_log_request(
+		function_name=function_name,
+		control_id=control_id,
+		request_xml=ET.tostring(request, encoding="unicode"),
+		response_xml=ET.tostring(root, encoding="unicode"),
+		status="Success",
+		duration_ms=int((time.time() - started) * 1000),
+		reference=reference,
+		entity_id=entity,
+		intacct_key=keys[0] if keys else None,
+	)
+	return keys or [None] * len(function_elements)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
