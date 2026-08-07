@@ -457,9 +457,14 @@ def sync_items(modified_since=None):
 # on the ITEM object at all, so cost arrives here, per warehouse, or not at all.
 STOCK_FIELDS = ["ITEMID", "WAREHOUSEID", "WONHAND", "AVERAGE_COST", "LAST_COST"]
 
-# Rows per opening Stock Reconciliation. Small enough that one document saves and submits
-# comfortably, large enough not to produce hundreds of documents.
-OPENING_STOCK_BATCH_SIZE = 200
+# Rows per opening Stock Reconciliation.
+#
+# MUST stay at or below 100. Frappe defers submit() to a background job once a document
+# has MORE than 100 child rows — submit() then returns having done nothing visible, the
+# document sits at draft, and no stock ledger entries appear. It looks like a silent
+# failure: the job reports success, the documents exist, and there is no stock.
+# Observed on the first opening run at batch size 200 (all 10 documents left at draft).
+OPENING_STOCK_BATCH_SIZE = 100
 
 
 def _read_intacct_stock(company):
@@ -559,6 +564,15 @@ def post_opening_stock(company=None):
 			doc.append("items", row)
 		doc.insert(ignore_permissions=True)
 		doc.submit()
+		doc.reload()
+		if doc.docstatus != 1:
+			# Never report a batch as posted when it is not. A deferred or refused submit
+			# leaves a draft with no ledger entries, which is indistinguishable from
+			# success unless it is checked.
+			frappe.throw(
+				f"{doc.name} did not submit (docstatus {doc.docstatus}). "
+				f"Batch size is {OPENING_STOCK_BATCH_SIZE} — Frappe defers submit above 100 rows."
+			)
 		# Commit per batch so an interruption keeps the batches already posted. This is
 		# a once-only operation and re-running is blocked by the stock-movement guard,
 		# so partial progress must survive rather than roll back.
