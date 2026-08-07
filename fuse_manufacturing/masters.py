@@ -1085,7 +1085,7 @@ def stock_drift_report(company=None):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def sync_kits(company=None):
+def sync_kits(company=None, rebuild=False):
 	"""Intacct kits → ERPNext BOMs.
 
 	A kit in Intacct IS the finished good: an ITEM whose ITEMTYPE contains "Kit"
@@ -1135,52 +1135,115 @@ def sync_kits(company=None):
 	created = replaced = unchanged = 0
 	skipped = []
 
-	# Dependency order: a kit is only built once every kit it consumes already has a
-	# BOM, so ERPNext can link the sub-assembly instead of treating it as a raw part.
-	pending = [k for k in kits if val(k, "ITEMID") in by_kit]
-	built = set()
+	# ── Pass 1: work out the dependency order ───────────────────────────────
+	# A kit can only be built once every kit it consumes has a BOM, so ERPNext links the
+	# sub-assembly instead of treating it as a raw part. Establish that order FIRST,
+	# without touching anything, because cancellation needs the exact reverse of it.
+	build_order = []
+	pending = [val(k, "ITEMID") for k in kits if val(k, "ITEMID") in by_kit]
+	placed = set()
 
 	while pending:
-		progressed = False
 		still_pending = []
-
-		for kit in pending:
-			code = val(kit, "ITEMID")
-			lines = sorted(by_kit.get(code, []), key=lambda x: x["line"])
-
-			blockers = [
-				line["item_code"]
+		for code in pending:
+			lines = by_kit.get(code, [])
+			blocked = any(
+				line["item_code"] in kit_codes and line["item_code"] not in placed
 				for line in lines
-				if line["item_code"] in kit_codes and line["item_code"] not in built
-			]
-			if blockers:
-				still_pending.append(kit)
-				continue
-
-			outcome = _build_bom(code, lines, company)
-			progressed = True
-			built.add(code)
-
-			if outcome == "created":
-				created += 1
-			elif outcome == "replaced":
-				replaced += 1
-			elif outcome == "unchanged":
-				unchanged += 1
+			)
+			if blocked:
+				still_pending.append(code)
 			else:
-				skipped.append({"kit": code, "reason": outcome})
+				build_order.append(code)
+				placed.add(code)
 
-		if not progressed:
-			# Circular recipe — a kit that ultimately contains itself. Intacct allows
-			# it to be saved; ERPNext cannot explode it and neither can a factory.
-			for kit in still_pending:
-				skipped.append({"kit": val(kit, "ITEMID"), "reason": "circular recipe"})
+		if len(still_pending) == len(pending):
+			# Circular recipe — a kit that ultimately contains itself. Intacct allows it
+			# to be saved; ERPNext cannot explode it and neither can a factory.
+			for code in still_pending:
+				skipped.append({"kit": code, "reason": "circular recipe"})
 			break
-
 		pending = still_pending
 
+	# ── Pass 2: decide what to build, then clear what it replaces ───────────
+	to_build = {}
+	changed = []
+	for code in build_order:
+		lines = sorted(by_kit.get(code, []), key=lambda x: x["line"])
+		signature = _recipe_signature(lines)
+		existing = frappe.db.get_value(
+			"BOM",
+			{"item": code, "docstatus": 1, "custom_intacct_signature": ["is", "set"]},
+			["name", "custom_intacct_signature"],
+		)
+		if existing and existing[1] == signature:
+			unchanged += 1
+			continue
+
+		if existing and not rebuild:
+			# The recipe changed in Intacct but a BOM already exists. REPORTED, NOT
+			# REPLACED — replacing means cancelling, and ERPNext refuses to cancel a BOM
+			# with open Work Orders against it, which on a live site is the normal state.
+			# Forcing it would fail routinely; failing quietly would leave production
+			# running a recipe Intacct has changed. Both are worse than telling someone.
+			changed.append({"kit": code, "bom": existing[0], "components": len(lines)})
+			continue
+
+		to_build[code] = existing[0] if existing else None
+
+	# Cancel outgoing BOMs PARENTS FIRST — only on an explicit rebuild.
+	# ERPNext refuses to cancel a BOM another BOM still links to, so a sub-assembly
+	# cannot go until every parent consuming it has gone. That is the exact reverse of
+	# the build order.
+	blocked = []
+	if rebuild:
+		for code in reversed(build_order):
+			old = to_build.get(code)
+			if not old:
+				continue
+			try:
+				doc = frappe.get_doc("BOM", old)
+				doc.db_set("is_default", 0)
+				doc.db_set("is_active", 0)
+				doc.cancel()
+				# COMMIT THE CANCEL BEFORE ATTEMPTING THE DELETE. If the delete fails and
+				# rolls back an uncommitted cancel, the BOM returns to submitted, a
+				# replacement gets built anyway, and the kit ends up with two active BOMs
+				# — the exact mess this ordering exists to prevent.
+				frappe.db.commit()
+
+				# Delete rather than leave it cancelled. These are mirror artefacts of an
+				# Intacct recipe, not records of anything that happened. If the delete is
+				# refused the cancel still stands and the rebuild proceeds.
+				try:
+					frappe.delete_doc("BOM", old, ignore_permissions=True, force=False)
+					frappe.db.commit()
+				except Exception:
+					frappe.db.rollback()
+			except Exception as exc:
+				# Almost always an open Work Order against it. Report and leave the
+				# existing BOM alone — do NOT build a replacement it cannot displace,
+				# or the kit ends up with two active BOMs and no clear default.
+				frappe.db.rollback()
+				blocked.append({"kit": code, "bom": old, "reason": str(exc)[:200]})
+				to_build.pop(code, None)
+
+	# ── Pass 3: build the new ones, children first ──────────────────────────
+	for code in build_order:
+		if code not in to_build:
+			continue
+		lines = sorted(by_kit.get(code, []), key=lambda x: x["line"])
+		outcome = _build_bom(code, lines, company)
+		if outcome == "created":
+			if to_build[code]:
+				replaced += 1
+			else:
+				created += 1
+		else:
+			skipped.append({"kit": code, "reason": outcome})
+
 	frappe.db.commit()
-	return {
+	result = {
 		"kits_found": len(kits),
 		"kits_with_recipe": len(by_kit),
 		"created": created,
@@ -1188,6 +1251,33 @@ def sync_kits(company=None):
 		"unchanged": unchanged,
 		"skipped": skipped,
 	}
+	if changed:
+		result["changed_in_intacct_count"] = len(changed)
+		result["changed_in_intacct"] = changed[:200]
+		result["changed_note"] = (
+			"These recipes changed in Intacct but their BOM was NOT replaced — replacing "
+			"means cancelling, and ERPNext refuses that with open Work Orders. Review, "
+			"then run the 'kits_rebuild' job to replace them."
+		)
+	if blocked:
+		result["blocked_count"] = len(blocked)
+		result["blocked"] = blocked[:200]
+		result["blocked_note"] = "Could not be cancelled — almost always an open Work Order. Left as they were."
+	return result
+
+
+def rebuild_kits(company=None):
+	"""Replace every Intacct-sourced BOM, cancelling parents before children.
+
+	Deliberate and disruptive: use it when something outside the recipe changes how BOMs
+	must be written — a precision change, for instance — or to apply recipe changes that
+	the normal sync has reported but not applied.
+
+	During the rebuild a kit briefly has no active BOM. Unavoidable: ERPNext will not let
+	the old and new both be active, nor let the old go while a parent links to it. Run it
+	outside production hours.
+	"""
+	return sync_kits(company=company, rebuild=True)
 
 
 def _recipe_signature(lines):
@@ -1227,19 +1317,9 @@ def _build_bom(kit_code, lines, company):
 
 	signature = _recipe_signature(lines)
 
-	# Only ever touch a BOM this sync created. Leadertread needs alternative BOMs for
-	# raw-material substitution, and those are built by hand in ERPNext — Intacct has
-	# no way to express a second recipe. Matching on "the active BOM for this item"
-	# would find a substitution BOM and cancel it, silently destroying someone's work.
-	# The Intacct signature is what marks a BOM as ours.
-	existing = frappe.db.get_value(
-		"BOM",
-		{"item": kit_code, "docstatus": 1, "custom_intacct_signature": ["is", "set"]},
-		["name", "custom_intacct_signature", "is_default"],
-	)
-	if existing and existing[1] == signature:
-		return "unchanged"
-
+	# Any outgoing BOM has already been cancelled by the caller, parents first — see
+	# sync_kits. Cancelling here would fail the moment a recipe has any depth, because
+	# ERPNext refuses to cancel a BOM another BOM still links to.
 	doc = frappe.new_doc("BOM")
 	doc.item = kit_code
 	doc.company = company
@@ -1268,16 +1348,6 @@ def _build_bom(kit_code, lines, company):
 
 	doc.insert(ignore_permissions=True)
 	doc.submit()
-
-	if existing:
-		# Replace only after the new one is safely in, so a failure never leaves the
-		# kit with no active BOM at all.
-		old = frappe.get_doc("BOM", existing[0])
-		old.db_set("is_default", 0)
-		old.db_set("is_active", 0)
-		old.cancel()
-		return "replaced"
-
 	return "created"
 
 
@@ -1347,6 +1417,7 @@ JOBS = {
 	"items": "sync_items",
 	"bins": "sync_bins",
 	"kits": "sync_kits",
+	"kits_rebuild": "rebuild_kits",
 	"all": "sync_all",
 	"opening_stock": "post_opening_stock",
 	"drift": "stock_drift_report",
