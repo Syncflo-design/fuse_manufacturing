@@ -23,7 +23,9 @@
   "column_break_tuning",
   "max_attempts",
   "status_section",
-  "last_item_sync"
+  "last_item_sync",
+  "last_sync_at",
+  "last_sync_result"
  ],
  "fields": [
   {
@@ -144,6 +146,20 @@
    "label": "Last Item Sync",
    "read_only": 1,
    "description": "Set only after a clean hourly run. A failure leaves it alone so the next attempt covers the same window instead of skipping it. Clear this to force a full re-read."
+  },
+  {
+   "fieldname": "last_sync_at",
+   "fieldtype": "Datetime",
+   "label": "Last Background Sync Started",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_sync_result",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Last Sync Result",
+   "read_only": 1,
+   "description": "Outcome of the most recent background sync. A full sync cannot fit in a web request, so it runs on the long queue and reports here."
   }
  ],
  "issingle": 1,

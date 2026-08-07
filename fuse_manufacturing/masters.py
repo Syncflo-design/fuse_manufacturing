@@ -815,6 +815,81 @@ def sync_all(company=None):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Background execution
+#
+# A full sync will not fit in a web request. Leadertread has ~2,600 items and tens of
+# thousands of component rows; kits alone means two large paged queries plus an insert
+# and submit per BOM. Run it on the long queue and read the result off Intacct Settings.
+# ──────────────────────────────────────────────────────────────────────────────
+
+JOBS = {
+	"warehouses": "sync_warehouses",
+	"uoms": "sync_uoms",
+	"items": "sync_items",
+	"bins": "sync_bins",
+	"kits": "sync_kits",
+	"all": "sync_all",
+	"opening_stock": "post_opening_stock",
+	"drift": "stock_drift_report",
+}
+
+
+@frappe.whitelist()
+def enqueue_sync(job, company=None):
+	"""Queue one sync to run in the background. Returns immediately.
+
+	Read the outcome from Intacct Settings → Last Sync Result.
+	"""
+	if job not in JOBS:
+		frappe.throw(f"Unknown job '{job}'. One of: {', '.join(sorted(JOBS))}")
+
+	frappe.enqueue(
+		"fuse_manufacturing.masters.run_sync",
+		queue="long",
+		timeout=3600,
+		job_name=f"fuse-sync-{job}",
+		job=job,
+		company=company,
+	)
+	return {"queued": job}
+
+
+def run_sync(job, company=None):
+	"""Run a named sync and record the outcome. Called by the queue, not directly."""
+	import traceback
+
+	from frappe.utils import now_datetime
+
+	started = now_datetime()
+	try:
+		fn = globals()[JOBS[job]]
+		result = fn(company=company) if job not in ("uoms", "drift") else fn()
+		payload = {"job": job, "status": "ok", "result": result}
+	except Exception:
+		# Record the failure where it can be read, then re-raise so it also lands in
+		# the Error Log with a full traceback.
+		payload = {"job": job, "status": "failed", "error": traceback.format_exc()[-2000:]}
+		_record_sync_result(payload, started)
+		raise
+
+	_record_sync_result(payload, started)
+	return payload
+
+
+def _record_sync_result(payload, started):
+	import json
+
+	frappe.db.set_single_value(
+		"Intacct Settings",
+		{
+			"last_sync_result": json.dumps(payload, indent=2, default=str)[:9000],
+			"last_sync_at": started,
+		},
+	)
+	frappe.db.commit()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Scheduled entry points
 # ──────────────────────────────────────────────────────────────────────────────
 
