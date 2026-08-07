@@ -520,43 +520,77 @@ def _read_intacct_stock(company):
 
 
 def post_opening_stock(company=None):
-	"""Post Intacct's on-hand into ERPNext ONCE, as an opening Stock Reconciliation.
+	"""Post Intacct's on-hand into ERPNext as opening Stock Reconciliations.
 
-	Deliberately a one-off. From here ERPNext maintains its own quantities from the
-	movements it posts, and `stock_drift_report` is how disagreement gets noticed.
-	Re-reading Intacct on a schedule and silently correcting would hide the very bugs
-	that cause drift, and could overwrite a movement that has not posted yet.
+	Once per item/warehouse combination, and RESUMABLE: a run that dies halfway can be
+	run again and continues from where it stopped. An earlier version refused outright
+	if any stock movement existed, which sounded safe and was not — the first run posted
+	one batch, stopped, and the retry was refused, leaving the opening 5% done with no
+	way forward.
 
-	Refuses to run if any stock movement already exists — that is what makes it
-	once-only rather than merely intended to be.
+	From here ERPNext maintains its own quantities from the movements it posts, and
+	`stock_drift_report` is how disagreement gets noticed. Re-reading Intacct on a
+	schedule and silently correcting would hide the very bugs that cause drift.
 
-	Valuation comes from Intacct's AVERAGE_COST, never invented locally.
+	Valuation comes from Intacct (AVERAGE_COST, then LAST_COST); where Intacct holds no
+	cost at all the line opens at NO_COST_SENTINEL so the quantity is never lost.
 	"""
 	company = company or _target_companies()[0]
 
-	if frappe.db.exists("Stock Ledger Entry", {"company": company}):
-		frappe.throw(
-			f"{company} already has stock movements. Opening stock is a once-only "
-			"operation — use stock_drift_report to compare against Intacct instead."
+	# Combinations that already hold stock, so a resumed run does not open them twice.
+	#
+	# Scoped by the company's actual warehouse list, NOT by a name pattern: warehouse
+	# names only end in "- LRC" by ERPNext convention, and a synced Intacct name could
+	# break that at any time. Filtering on actual_qty because ERPNext creates Bin rows
+	# for things like reorder levels — a Bin alone does not mean stock was opened.
+	company_warehouses = frappe.get_all(
+		"Warehouse", filters={"company": company}, pluck="name", limit_page_length=0
+	)
+	already_open = {
+		(b.item_code, b.warehouse)
+		for b in frappe.get_all(
+			"Bin",
+			fields=["item_code", "warehouse"],
+			filters={"warehouse": ["in", company_warehouses], "actual_qty": ["!=", 0]},
+			limit_page_length=0,
 		)
+	}
 
 	balances = _read_intacct_stock(company)
+
+	# Every item in one query rather than two per row. At ~2,000 rows the per-row version
+	# was ~4,000 round trips for data that fits in a single read.
+	item_meta = {
+		i.name: i
+		for i in frappe.get_all(
+			"Item",
+			fields=["name", "is_stock_item", "has_batch_no", "has_serial_no"],
+			filters={"name": ["in", list({code for code, _ in balances})]},
+			limit_page_length=0,
+		)
+	}
 
 	rows = []
 	skipped = []
 	no_cost = []
 
+	resumed = 0
 	for (item_code, warehouse), balance in sorted(balances.items()):
 		if balance["qty"] <= 0:
 			continue
-		if not frappe.db.exists("Item", item_code):
-			skipped.append({"item": item_code, "reason": "item not synced"})
+		if (item_code, warehouse) in already_open:
+			# Opened by an earlier run. Never open it twice.
+			resumed += 1
 			continue
 
-		item = frappe.db.get_value(
-			"Item", item_code, ["is_stock_item", "has_batch_no", "has_serial_no"], as_dict=True
-		)
+		item = item_meta.get(item_code)
+		if not item:
+			skipped.append({"item": item_code, "reason": "item not synced"})
+			continue
 		if not item.is_stock_item:
+			# Non-stock in ERPNext but holding a balance in Intacct. Reported rather than
+			# dropped silently — it means the two systems disagree about what this is.
+			skipped.append({"item": item_code, "warehouse": warehouse, "reason": "not a stock item"})
 			continue
 		if item.has_batch_no or item.has_serial_no:
 			# A tracked item needs its batch or serial identities, which Intacct holds
@@ -578,7 +612,12 @@ def post_opening_stock(company=None):
 		)
 
 	if not rows:
-		return {"posted": 0, "skipped": skipped, "note": "Nothing to open."}
+		return {
+			"posted": 0,
+			"already_open": resumed,
+			"skipped": skipped,
+			"note": "Nothing left to open — every balance is already in.",
+		}
 
 	# Batched, NOT one document. Leadertread has ~2,600 items across 53 warehouses, so a
 	# single Stock Reconciliation could carry tens of thousands of rows — one enormous
@@ -603,15 +642,16 @@ def post_opening_stock(company=None):
 				f"{doc.name} did not submit (docstatus {doc.docstatus}). "
 				f"Batch size is {OPENING_STOCK_BATCH_SIZE} — Frappe defers submit above 100 rows."
 			)
-		# Commit per batch so an interruption keeps the batches already posted. This is
-		# a once-only operation and re-running is blocked by the stock-movement guard,
-		# so partial progress must survive rather than roll back.
+		# Commit per batch so an interruption keeps the batches already posted. Combined
+		# with the already_open check above, that is what makes a re-run resume rather
+		# than duplicate.
 		frappe.db.commit()
 		documents.append(doc.name)
 
 	return {
 		"stock_reconciliations": documents,
 		"posted": len(rows),
+		"already_open": resumed,
 		"batches": len(documents),
 		"skipped_count": len(skipped),
 		"skipped": skipped[:200],

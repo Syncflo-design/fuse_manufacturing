@@ -231,8 +231,15 @@ overwrite a movement that has not posted yet.
 ways. If they stop agreeing, that is a fault to find, not a number to overwrite.
 
 **Consequences:**
-- `post_opening_stock` refuses to run once any stock movement exists — once-only in
-  fact, not just in intention.
+- `post_opening_stock` is once-only **per item/warehouse combination**, and resumable.
+  It first refused outright if any stock movement existed. That read as safe and was
+  not: the first real run posted one batch of 100, stopped, and the retry was refused —
+  leaving the opening 5% done with no way to continue. It now skips combinations that
+  already hold stock and opens the rest, so a run that dies can simply be run again.
+- Zero-cost items open at **0.01**, not skipped. ERPNext refuses a stock line with no
+  valuation rate, so skipping would silently lose the quantity — the thing the factory
+  actually needs. 0.01 is never a plausible cost, is glaring in any report, and the
+  exact figure is the worklist: filter Bin valuation rate = 0.01.
 - Valuation on the opening entry comes from Intacct's `AVERAGE_COST`. ERPNext never
   invents a value.
 - **Batch and serial tracked items are skipped and reported.** Intacct holds those per
