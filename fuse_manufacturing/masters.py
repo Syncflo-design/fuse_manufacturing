@@ -128,7 +128,14 @@ def sync_warehouses(company=None):
 			doc.custom_intacct_location_id = val(row, "LOC.LOCATIONID")
 			doc.custom_intacct_entity_id = owner_entity
 			doc.custom_intacct_recordno = val(row, "RECORDNO")
-			doc.save(ignore_permissions=True)
+
+			# Only write when something actually differs. Saving unconditionally bumped
+			# every warehouse's modified timestamp and wrote a Version record on every
+			# daily run — noise that buries the changes you would want to notice.
+			if doc.is_new() or _has_changes(doc):
+				doc.save(ignore_permissions=True)
+			elif existing:
+				updated -= 1
 
 		# Intacct warehouses are themselves a tree (PARENTID). Reparent in a second pass
 		# so a child is never processed before its parent exists.
@@ -248,8 +255,11 @@ def sync_bins(company=None):
 			doc.size_id = val(row, "SIZEID")
 			doc.sequence_no = number(row, "SEQUENCENO", 0)
 			doc.intacct_recordno = val(row, "RECORDNO")
-			doc.save(ignore_permissions=True)
-			mirrored += 1
+
+			# Same reasoning as warehouses: do not rewrite an unchanged mirror.
+			if doc.is_new() or _has_changes(doc):
+				doc.save(ignore_permissions=True)
+				mirrored += 1
 			seen.add(name)
 
 			if status == "active" and (warehouse_id not in lowest or bin_id < lowest[warehouse_id]):
@@ -275,7 +285,7 @@ def sync_bins(company=None):
 
 		result[comp] = {
 			"read": len(rows),
-			"mirrored": mirrored,
+			"written": mirrored,
 			"removed": removed,
 			"warehouses_with_bins": len(lowest),
 			"default_bin_stamped": stamped,
@@ -439,7 +449,11 @@ def sync_items(modified_since=None):
 		doc.custom_intacct_recordno = val(row, "RECORDNO")
 		doc.custom_intacct_bin_tracked = 1 if flag(row, "ENABLE_BINS") else 0
 
-		doc.save(ignore_permissions=True)
+		# 2,566 items rewritten hourly is 2,566 Version records an hour for nothing.
+		if doc.is_new() or _has_changes(doc):
+			doc.save(ignore_permissions=True)
+		elif existing:
+			updated -= 1
 
 	frappe.db.commit()
 
@@ -471,6 +485,10 @@ OPENING_STOCK_BATCH_SIZE = 100
 # figure is the worklist — filter valuation rate = 0.01 to find every item still needing
 # a real cost in Intacct.
 NO_COST_SENTINEL = 0.01
+
+# Bump to force a full BOM rebuild on the next kits sync, when the reason is outside the
+# recipe itself. v2 = site float precision raised 3 → 4 to match Intacct's quantities.
+SIGNATURE_VERSION = "v2"
 
 
 def _read_intacct_stock(company):
@@ -678,24 +696,47 @@ def stock_drift_report(company=None):
 	):
 		erp[(row.item_code, row.warehouse)] = row.actual_qty
 
+	# Ignore differences smaller than ERPNext can represent.
+	#
+	# Intacct holds quantities to 4 decimals, ERPNext stores 3. Comparing raw floats
+	# reported 43 "drift" rows on a clean import, every one under a milligram — pure
+	# rounding. A report that always shows drift gets ignored, which is worse than no
+	# report: the one time it matters, nobody looks.
+	from frappe.utils import cint
+
+	precision = cint(frappe.db.get_default("float_precision")) or 3
+	tolerance = 10.0**-precision
+
 	drift = []
+	rounding_only = 0
 	for key in set(intacct) | set(erp):
 		item_code, warehouse = key
 		intacct_qty = intacct.get(key, {}).get("qty", 0)
 		erp_qty = erp.get(key, 0)
-		if abs(intacct_qty - erp_qty) > 0.0001:
-			drift.append(
-				{
-					"item": item_code,
-					"warehouse": warehouse,
-					"intacct": intacct_qty,
-					"erpnext": erp_qty,
-					"difference": erp_qty - intacct_qty,
-				}
-			)
+		difference = erp_qty - intacct_qty
+		if abs(difference) <= tolerance:
+			if difference:
+				rounding_only += 1
+			continue
+		drift.append(
+			{
+				"item": item_code,
+				"warehouse": warehouse,
+				"intacct": intacct_qty,
+				"erpnext": erp_qty,
+				"difference": difference,
+			}
+		)
 
 	drift.sort(key=lambda d: abs(d["difference"]), reverse=True)
-	return {"company": company, "compared": len(set(intacct) | set(erp)), "drift": drift}
+	return {
+		"company": company,
+		"compared": len(set(intacct) | set(erp)),
+		"tolerance": tolerance,
+		"rounding_only": rounding_only,
+		"drift_count": len(drift),
+		"drift": drift[:200],
+	}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -823,7 +864,11 @@ def _recipe_signature(lines):
 	readable = "|".join(
 		f"{line['item_code']}:{float(line['qty']):.6f}:{line['uom'] or ''}" for line in lines
 	)
-	return hashlib.sha1(readable.encode("utf-8")).hexdigest()
+	# Bump SIGNATURE_VERSION to force every BOM to be rebuilt on the next kits sync —
+	# used when something OUTSIDE the recipe changes how a BOM is written. v2: site float
+	# precision moved 3 → 4 to match Intacct, and BOMs built at 3 had already lost a digit
+	# (0.0085 kg/kg was stored as 0.008 per unit — 8 kg instead of 8.5 on a 1,000 kg batch).
+	return hashlib.sha1(f"{SIGNATURE_VERSION}|{readable}".encode()).hexdigest()
 
 
 def _build_bom(kit_code, lines, company):
@@ -1153,6 +1198,24 @@ def _target_companies(company=None):
 			"then set the matching one on each Company."
 		)
 	return companies
+
+
+def _has_changes(doc):
+	"""True when an in-memory doc differs from what is stored.
+
+	Frappe tracks this itself via get_doc_before_save, but only after a load; comparing
+	the loaded values directly is simpler and does not depend on that being populated.
+	"""
+	if doc.is_new():
+		return True
+	stored = frappe.db.get_value(doc.doctype, doc.name, "*", as_dict=True) or {}
+	for field in doc.meta.get_valid_columns():
+		if field in ("modified", "modified_by", "creation", "owner", "idx", "_user_tags",
+		             "_comments", "_assign", "_liked_by", "docstatus"):
+			continue
+		if str(stored.get(field) or "") != str(doc.get(field) or ""):
+			return True
+	return False
 
 
 def _root_warehouse(company):
