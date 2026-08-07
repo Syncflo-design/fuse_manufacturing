@@ -84,6 +84,62 @@ WAREHOUSE_FIELDS = [
 ]
 
 
+def list_transaction_definitions(company=None):
+	"""Every inventory transaction definition this Intacct company actually has.
+
+	Reads, never writes. Every tenant is configured differently, and the definition names
+	the postings use must match character for character — so they are verified against
+	the company rather than assumed from another one.
+
+	What matters per definition:
+	  IN_OUT       Increase or Decrease — the direction the definition applies itself,
+	               which is why quantities are always sent POSITIVE.
+	  UPDATES_COST Whether it values the movement. Send a cost only where this is true;
+	               on a consume leg it would override Intacct's own valuation.
+	  CREATETYPE   Convert-only definitions cannot be posted through create_ictransaction
+	               at all — they exist only by converting a source document.
+	"""
+	rows = gateway.query(
+		"INVDOCUMENTPARAMS",
+		["RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "IN_OUT", "UPDATES_COST",
+		 "UPDATES_INV", "CREATETYPE", "STATUS"],
+		company=company,
+	)
+
+	definitions = [
+		{
+			"docid": val(row, "DOCID"),
+			"description": val(row, "DESCRIPTION"),
+			"class": val(row, "DOCCLASS"),
+			"in_out": val(row, "IN_OUT"),
+			"updates_cost": val(row, "UPDATES_COST"),
+			"updates_inventory": val(row, "UPDATES_INV"),
+			"create_type": val(row, "CREATETYPE"),
+			"status": val(row, "STATUS"),
+		}
+		for row in rows
+	]
+	definitions.sort(key=lambda d: (d["docid"] or "").lower())
+
+	# Flag the ones the postings depend on, so a name mismatch is obvious rather than
+	# surfacing later as a rejection nobody can place.
+	from fuse_manufacturing import postings
+
+	required = {postings.MANUFACTURING_CONSUME, postings.MANUFACTURING_PRODUCE}
+	present = {d["docid"] for d in definitions}
+	missing = sorted(required - present)
+
+	return {
+		"count": len(definitions),
+		"definitions": definitions,
+		"required_by_postings": sorted(required),
+		"missing": missing,
+		"note": "Missing means the posting will be rejected — the name must match exactly."
+		if missing
+		else "All definitions the postings use are present.",
+	}
+
+
 def map_entities(company=None):
 	"""Map Intacct entities onto ERPNext Companies, without anyone typing an ID.
 
@@ -1373,6 +1429,7 @@ _LOCK_BUSY = _lock_busy_exceptions()
 
 JOBS = {
 	"entities": "list_entities",
+	"definitions": "list_transaction_definitions",
 	"map_entities": "map_entities",
 	"item_groups": "sync_item_groups",
 	"warehouses": "sync_warehouses",
