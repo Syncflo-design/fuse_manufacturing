@@ -110,6 +110,17 @@ CUSTOM_FIELDS = {
 			"description": "SHA1 of the Intacct kit recipe this BOM was built from. Lets the sync tell a changed recipe from an unchanged one, so it does not cancel and rebuild every BOM on every run. Hashed because a real compound recipe runs well past a Data field's 140 characters.",
 		},
 	],
+	"Item Group": [
+		{
+			"fieldname": "custom_intacct_product_line",
+			"fieldtype": "Data",
+			"label": "Intacct Product Line",
+			"insert_after": "item_group_name",
+			"read_only": 1,
+			"unique": 1,
+			"description": "PRODUCTLINEID. Item Groups mirror Intacct's product line tree so items are filed the way Intacct files them.",
+		},
+	],
 	"Company": [
 		{
 			"fieldname": "custom_intacct_entity_id",

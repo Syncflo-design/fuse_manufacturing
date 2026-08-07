@@ -52,6 +52,37 @@ A company contains N **entities** (`locationid`). Hierarchy: **company → entit
 Store the Intacct entity ID against each ERPNext Company; send it as `<locationid>` on
 **every** login.
 
+## The governing principle — read this before designing anything
+
+**Intacct is the golden source. The app pulls everything it can from Intacct. No
+guessing, no hardcoded defaults, no misalignment.**
+
+Installing the app on a **new, empty ERPNext instance** must produce a correctly
+configured site with nothing typed in by hand beyond the credentials. If a value can be
+read from Intacct, read it — do not choose it, do not default it, do not ask for it.
+
+This applies to configuration as much as to data:
+
+| Instead of | Take it from |
+|---|---|
+| A chosen Item Group | `PRODUCTLINE` (a tree — mirror it) |
+| A chosen decimal precision | `ITEM.INV_PRECISION` |
+| A typed-in entity ID | `LOCATIONENTITY`, auto-mapped when unambiguous |
+| A chosen currency | `LOCATIONENTITY.CURRENCY` |
+| Assuming 1:1 units | `UOM.POUOMDETAIL` / `SOUOMDETAIL` conversion factors |
+| ERPNext's shipped UOMs and warehouses | Delete or disable what Intacct does not use |
+
+**Two rules that follow from it:**
+
+1. **Never invent a value to make something work.** If Intacct has no cost, open at the
+   0.01 sentinel so the gap is visible — do not substitute a plausible number.
+2. **Never silently destroy on the way to alignment.** Precision is only ever raised,
+   never lowered. Currency changes are attempted and reported, not forced. A wrong
+   auto-guess is worse than no guess, so ambiguity is reported for a human.
+
+Every new feature gets the same question: *what would this do on a fresh instance for a
+different client, with nobody to correct it?*
+
 ## The integration contract
 
 - **Intacct posts first, always.** If Intacct rejects the post, the ERPNext transaction

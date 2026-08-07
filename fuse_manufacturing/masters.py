@@ -29,12 +29,17 @@ def list_entities():
 	"""
 	rows = gateway.query(
 		"LOCATIONENTITY",
-		["RECORDNO", "LOCATIONID", "NAME", "STATUS"],
+		["RECORDNO", "LOCATIONID", "NAME", "STATUS", "CURRENCY"],
 		filter_xml="<equalto><field>STATUS</field><value>active</value></equalto>",
 	)
 
 	entities = [
-		{"entity_id": val(row, "LOCATIONID"), "name": val(row, "NAME"), "recordno": val(row, "RECORDNO")}
+		{
+			"entity_id": val(row, "LOCATIONID"),
+			"name": val(row, "NAME"),
+			"recordno": val(row, "RECORDNO"),
+			"currency": val(row, "CURRENCY"),
+		}
 		for row in rows
 	]
 
@@ -70,6 +75,81 @@ WAREHOUSE_FIELDS = [
 	"LOC.LOCATIONID",
 	"ENABLENEGATIVEINV",
 ]
+
+
+def map_entities(company=None):
+	"""Map Intacct entities onto ERPNext Companies, without anyone typing an ID.
+
+	Auto-maps only when it is UNAMBIGUOUS — one active entity and one company. That is
+	the normal shape (one client, one instance, one entity) and it removes the step most
+	likely to be got wrong: an entity typed in by hand is how stock ends up posted to
+	the wrong books, and Intacct will not complain.
+
+	With several of either, it reports what it found and leaves the mapping alone.
+	A wrong guess here is worse than no guess.
+	"""
+	entities = [e for e in list_entities()]
+	companies = frappe.get_all("Company", pluck="name", order_by="name")
+
+	if len(entities) == 1 and len(companies) == 1:
+		entity_id = entities[0]["entity_id"]
+		current = frappe.db.get_value("Company", companies[0], "custom_intacct_entity_id")
+		if current == entity_id:
+			return {
+				"mapped": False,
+				"reason": "already mapped",
+				"company": companies[0],
+				"entity": entity_id,
+				"currency": _align_company_currency(companies[0], entities[0].get("currency")),
+			}
+		frappe.db.set_value("Company", companies[0], "custom_intacct_entity_id", entity_id)
+		frappe.db.commit()
+		result = {"mapped": True, "company": companies[0], "entity": entity_id, "was": current or None}
+		result["currency"] = _align_company_currency(companies[0], entities[0].get("currency"))
+		return result
+
+	return {
+		"mapped": False,
+		"reason": "ambiguous — map each Company to its entity by hand",
+		"entities": entities,
+		"companies": companies,
+	}
+
+
+def _align_company_currency(company, intacct_currency):
+	"""Match the ERPNext company's currency to the Intacct entity's base currency.
+
+	Left to a human to fix rather than forced, if ERPNext will not allow it: changing a
+	company's currency once transactions exist would revalue history, and ERPNext blocks
+	it for exactly that reason.
+	"""
+	if not intacct_currency:
+		return {"changed": False, "reason": "entity has no base currency"}
+
+	current = frappe.db.get_value("Company", company, "default_currency")
+	if current == intacct_currency:
+		return {"changed": False, "currency": current}
+
+	if not frappe.db.exists("Currency", intacct_currency):
+		return {
+			"changed": False,
+			"currency": current,
+			"warning": f"Intacct's base currency {intacct_currency} does not exist in ERPNext.",
+		}
+
+	try:
+		doc = frappe.get_doc("Company", company)
+		doc.default_currency = intacct_currency
+		doc.save(ignore_permissions=True)
+		frappe.db.commit()
+		return {"changed": True, "from": current, "to": intacct_currency}
+	except Exception as exc:
+		return {
+			"changed": False,
+			"currency": current,
+			"intacct_currency": intacct_currency,
+			"warning": f"ERPNext refused the change ({exc}). Almost certainly because transactions already exist — changing it now would revalue history.",
+		}
 
 
 def sync_warehouses(company=None):
@@ -308,9 +388,23 @@ def sync_uoms():
 	are SA English — "Cubic metres", "Litres", "Kilograms" — and ERPNext ships none of
 	them, so they have to be created rather than mapped to ERPNext's own spellings.
 	"""
-	rows = gateway.query("ITEM", ["RECORDNO", "BASEUOM"])
+	rows = gateway.query(
+		"ITEM",
+		["RECORDNO", "BASEUOM", "UOM.POUOMDETAIL.UNIT", "UOM.SOUOMDETAIL.UNIT"],
+	)
 
-	units = {val(row, "BASEUOM") for row in rows}
+	# Every unit Intacct uses anywhere on an item, not just the stock unit — a purchase
+	# unit that does not exist here means the conversion cannot be recorded and the
+	# receipt is silently wrong.
+	units = set()
+	for row in rows:
+		units.update(
+			{
+				val(row, "BASEUOM"),
+				val(row, "UOM.POUOMDETAIL.UNIT"),
+				val(row, "UOM.SOUOMDETAIL.UNIT"),
+			}
+		)
 	units.discard(None)
 
 	created = []
@@ -325,6 +419,86 @@ def sync_uoms():
 
 	frappe.db.commit()
 	return {"distinct_units": len(units), "created": created}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Product lines → Item Groups
+# ──────────────────────────────────────────────────────────────────────────────
+
+PRODUCTLINE_FIELDS = ["RECORDNO", "PRODUCTLINEID", "DESCRIPTION", "PARENTLINE", "STATUS"]
+
+
+def sync_item_groups(company=None):
+	"""Intacct PRODUCTLINE → ERPNext Item Group.
+
+	Both are trees, so the hierarchy carries across. Without this every item lands in
+	one catch-all group chosen by us — a guess that has to be corrected by hand on every
+	new client instance, which is exactly what Intacct-as-source is meant to remove.
+
+	Groups are created but never deleted: an Item Group with items under it cannot be
+	removed, and a product line retired in Intacct does not make its history disappear.
+	"""
+	rows = gateway.query("PRODUCTLINE", PRODUCTLINE_FIELDS, company=company)
+
+	# The root's parent is NULL on a fresh site and "" on some, and a dict filter of ""
+	# will not match NULL — so ask for either.
+	root = frappe.db.get_value(
+		"Item Group", {"is_group": 1, "parent_item_group": ["in", ["", None]]}, "name"
+	)
+	if not root:
+		frappe.throw("No root Item Group found — cannot build the product line tree under it.")
+
+	created = 0
+	by_id = {}
+	used_names = set(frappe.get_all("Item Group", pluck="item_group_name", limit_page_length=0))
+
+	# Two passes: create everything flat first, then set parents. A product line can
+	# reference a parent that appears later in the list.
+	for row in rows:
+		line_id = val(row, "PRODUCTLINEID")
+		if not line_id:
+			continue
+		name = frappe.db.get_value("Item Group", {"custom_intacct_product_line": line_id}, "name")
+		if not name:
+			# Item Group is named by its label, so two product lines sharing a
+			# description — or clashing with an ERPNext default like "Products" —
+			# would collide. Fall back to the product line ID, which is unique.
+			label = (val(row, "DESCRIPTION") or line_id).strip()[:140] or line_id
+			if label in used_names:
+				label = f"{label} ({line_id})"[:140]
+
+			doc = frappe.new_doc("Item Group")
+			doc.item_group_name = label
+			doc.parent_item_group = root
+			doc.is_group = 0
+			doc.custom_intacct_product_line = line_id
+			doc.insert(ignore_permissions=True)
+			name = doc.name
+			used_names.add(label)
+			created += 1
+		by_id[line_id] = name
+
+	reparented = 0
+	for row in rows:
+		line_id = val(row, "PRODUCTLINEID")
+		parent_id = val(row, "PARENTLINE")
+		if not line_id or not parent_id:
+			continue
+		child, parent = by_id.get(line_id), by_id.get(parent_id)
+		if not child or not parent or child == parent:
+			continue
+		parent_doc = frappe.get_doc("Item Group", parent)
+		if not parent_doc.is_group:
+			parent_doc.is_group = 1
+			parent_doc.save(ignore_permissions=True)
+		child_doc = frappe.get_doc("Item Group", child)
+		if child_doc.parent_item_group != parent:
+			child_doc.parent_item_group = parent
+			child_doc.save(ignore_permissions=True)
+			reparented += 1
+
+	frappe.db.commit()
+	return {"read": len(rows), "created": created, "reparented": reparented}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -346,7 +520,27 @@ ITEM_FIELDS = [
 	"ENABLE_EXPIRATION",
 	"UPC",
 	"EAN13",
+	# Intacct's own decimal precision for this item's inventory quantities. ERPNext's
+	# float precision is aligned to the highest one seen rather than guessed — Intacct
+	# is the source for this the same as for everything else.
+	"INV_PRECISION",
+	# Drives the ERPNext Item Group, so items are filed the way Intacct files them
+	# instead of all landing in one group we picked.
+	"PRODUCTLINEID",
+	# Purchase and sales units, with their factor against the stock unit. Without these
+	# an item bought in drums and stocked in kilograms is treated as 1:1 — a receipt of
+	# 5 drums becomes 5 kg.
+	"UOM.POUOMDETAIL.UNIT",
+	"UOM.POUOMDETAIL.CONVFACTOR",
+	"UOM.SOUOMDETAIL.UNIT",
+	"UOM.SOUOMDETAIL.CONVFACTOR",
 ]
+
+# Never go below this, whatever Intacct says. ERPNext's own default is 3 and dropping
+# under it would round quantities that other parts of ERPNext expect to keep.
+MIN_FLOAT_PRECISION = 3
+# Frappe's field allows up to 9.
+MAX_FLOAT_PRECISION = 9
 
 
 def sync_items(modified_since=None):
@@ -369,11 +563,22 @@ def sync_items(modified_since=None):
 
 	rows = gateway.query("ITEM", ITEM_FIELDS, filter_xml=filter_xml)
 	default_group = _default_item_group()
+	group_by_line = {
+		g.custom_intacct_product_line: g.name
+		for g in frappe.get_all(
+			"Item Group",
+			fields=["name", "custom_intacct_product_line"],
+			filters={"custom_intacct_product_line": ["is", "set"]},
+			limit_page_length=0,
+		)
+	}
 
 	created = updated = skipped = 0
 	missing_uoms = set()
+	precisions = set()
 
 	for row in rows:
+		precisions.add(val(row, "INV_PRECISION"))
 		item_code = val(row, "ITEMID")
 		if not item_code:
 			continue
@@ -393,8 +598,15 @@ def sync_items(modified_since=None):
 		else:
 			doc = frappe.new_doc("Item")
 			doc.item_code = item_code
-			doc.item_group = default_group
 			created += 1
+
+		# Item Group follows Intacct's product line. The Settings default is only a
+		# fallback for items Intacct has not filed — not the normal case.
+		group = group_by_line.get(val(row, "PRODUCTLINEID"))
+		if group:
+			doc.item_group = group
+		elif not doc.item_group:
+			doc.item_group = default_group
 
 		doc.item_name = (val(row, "NAME") or item_code)[:140]
 		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
@@ -432,6 +644,36 @@ def sync_items(modified_since=None):
 			elif not doc.weight_uom:
 				doc.weight_uom = uom or doc.stock_uom
 
+		# Unit conversions. The stock unit is always 1; purchase and sales units carry
+		# Intacct's own factor. Rebuilt each run rather than appended, so a conversion
+		# removed in Intacct does not linger here and quietly mis-convert a receipt.
+		conversions = {}
+		if uom:
+			conversions[uom] = 1.0
+		for unit_field, factor_field in (
+			("UOM.POUOMDETAIL.UNIT", "UOM.POUOMDETAIL.CONVFACTOR"),
+			("UOM.SOUOMDETAIL.UNIT", "UOM.SOUOMDETAIL.CONVFACTOR"),
+		):
+			unit = val(row, unit_field)
+			factor = number(row, factor_field, 0)
+			if not unit or not factor:
+				continue
+			if not frappe.db.exists("UOM", unit):
+				missing_uoms.add(unit)
+				continue
+			# Never overwrite the stock unit's factor of 1.
+			if unit != uom:
+				conversions[unit] = factor
+
+		# Only when the stock unit itself is present. ERPNext requires the stock UOM to
+		# appear in this table with a factor of 1; writing a purchase unit without it
+		# fails validation on every item that has no BASEUOM.
+		if uom and conversions:
+			doc.set(
+				"uoms",
+				[{"uom": u, "conversion_factor": f} for u, f in conversions.items()],
+			)
+
 		# Barcodes — the scanner flows need these, and Intacct already holds them.
 		# Rebuilt from Intacct each run rather than appended, so a barcode removed
 		# there disappears here instead of lingering and scanning to a stale item.
@@ -460,7 +702,95 @@ def sync_items(modified_since=None):
 	result = {"read": len(rows), "created": created, "updated": updated, "skipped": skipped}
 	if missing_uoms:
 		result["missing_uoms"] = sorted(missing_uoms)
+
+	# Align decimal places to whatever Intacct actually uses, after the items are in.
+	result["float_precision"] = align_float_precision(precisions)
 	return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Remove ERPNext's shipped defaults
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _retire(doctype, name, field, off_value):
+	"""Delete if possible, otherwise switch it off. Returns what happened.
+
+	`field`/`off_value` differ per doctype and the polarity is easy to get backwards:
+	Warehouse has `disabled` (off = 1), UOM has `enabled` (off = 0).
+
+	ERPNext ships hundreds of UOMs and a handful of warehouses that Intacct has never
+	heard of. Left in place they are selectable, and the first person to pick one
+	creates stock or a unit that Intacct cannot reconcile.
+
+	Deleting is preferred, but anything referenced by another record cannot be deleted —
+	including ERPNext's own doctype defaults. Disabling achieves the same thing (not
+	selectable) without breaking the reference, so it is the fallback rather than a
+	failure.
+	"""
+	try:
+		frappe.delete_doc(doctype, name, ignore_permissions=True, force=False)
+		return "deleted"
+	except Exception:
+		# Roll back the failed delete before touching the row again, or the next
+		# statement runs inside a broken transaction.
+		frappe.db.rollback()
+		try:
+			frappe.db.set_value(doctype, name, field, off_value, update_modified=False)
+			frappe.db.commit()
+			return "disabled"
+		except Exception:
+			frappe.db.rollback()
+			return "kept"
+
+
+def remove_erpnext_defaults(company=None):
+	"""Strip ERPNext's shipped UOMs and warehouses that Intacct does not use.
+
+	Run AFTER the masters are in — it decides what to keep by what Intacct sent, so
+	running it against an empty site would remove everything.
+	"""
+	company = company or _target_companies()[0]
+
+	# ── UOMs ────────────────────────────────────────────────────────────────
+	# Keep anything an Item actually references, whether as its stock unit or as a
+	# purchase/sales conversion. Deleting a UOM in use would break those items.
+	# UOM Conversion Detail is a child table, and Frappe refuses a get_all on one without
+	# a parent filter — so read it directly. Missing these would disable the purchase and
+	# sales units we just imported, which is the opposite of the intent.
+	in_use = set(frappe.get_all("Item", pluck="stock_uom", limit_page_length=0))
+	in_use.update(
+		row[0]
+		for row in frappe.db.sql(
+			"select distinct uom from `tabUOM Conversion Detail` where uom is not null"
+		)
+	)
+	in_use.discard(None)
+
+	uom_result = {"deleted": 0, "disabled": 0, "kept": 0}
+	for uom in frappe.get_all("UOM", pluck="name", limit_page_length=0):
+		if uom in in_use:
+			continue
+		uom_result[_retire("UOM", uom, "enabled", 0)] += 1
+
+	# ── Warehouses ──────────────────────────────────────────────────────────
+	# Anything without an Intacct ID is ERPNext's own. The root group stays: it is the
+	# tree node every Intacct warehouse hangs under.
+	wh_result = {"deleted": 0, "disabled": 0, "kept": 0}
+	for wh in frappe.get_all(
+		"Warehouse",
+		fields=["name", "is_group", "parent_warehouse", "custom_intacct_warehouse_id"],
+		filters={"company": company},
+		limit_page_length=0,
+	):
+		if wh.custom_intacct_warehouse_id:
+			continue
+		if wh.is_group and not wh.parent_warehouse:
+			continue  # root of the tree
+		wh_result[_retire("Warehouse", wh.name, "disabled", 1)] += 1
+
+	frappe.db.commit()
+	return {"uoms": uom_result, "warehouses": wh_result}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -947,13 +1277,20 @@ def _build_bom(kit_code, lines, company):
 
 def sync_all(company=None):
 	"""Full masters pull, in dependency order."""
+	# Order matters and is not arbitrary: the entity must be mapped before anything can
+	# open a session against it, item groups must exist before items are filed into
+	# them, UOMs before items reference them, warehouses before bins hang off them, and
+	# items before kits can reference them as components.
 	return {
-		"entities": list_entities(),
+		"entities": map_entities(company=company),
+		"item_groups": sync_item_groups(company=company),
 		"warehouses": sync_warehouses(company=company),
 		"uoms": sync_uoms(),
 		"items": sync_items(),
 		"bins": sync_bins(company=company),
 		"kits": sync_kits(company=company),
+		# Last, because it decides what to keep by what Intacct actually sent.
+		"removed_defaults": remove_erpnext_defaults(company=company),
 	}
 
 
@@ -992,6 +1329,8 @@ _LOCK_BUSY = _lock_busy_exceptions()
 
 JOBS = {
 	"entities": "list_entities",
+	"map_entities": "map_entities",
+	"item_groups": "sync_item_groups",
 	"warehouses": "sync_warehouses",
 	"uoms": "sync_uoms",
 	"items": "sync_items",
@@ -1000,6 +1339,7 @@ JOBS = {
 	"all": "sync_all",
 	"opening_stock": "post_opening_stock",
 	"drift": "stock_drift_report",
+	"remove_defaults": "remove_erpnext_defaults",
 	# Used by the scheduler, not normally queued by hand.
 	"items_incremental": "_sync_items_incremental",
 	"config": "_sync_config",
@@ -1151,6 +1491,7 @@ def scheduled_config_sync():
 
 def _sync_config(company=None):
 	return {
+		"item_groups": sync_item_groups(company=company),
 		"warehouses": sync_warehouses(company=company),
 		"uoms": sync_uoms(),
 		"bins": sync_bins(company=company),
@@ -1198,6 +1539,50 @@ def _target_companies(company=None):
 			"then set the matching one on each Company."
 		)
 	return companies
+
+
+def align_float_precision(seen_precisions):
+	"""Set ERPNext's float precision from Intacct's own INV_PRECISION.
+
+	Intacct is the source for decimal places as it is for everything else, so this reads
+	the highest precision any item uses and matches it rather than hardcoding a number.
+
+	ONLY EVER RAISES IT. Lowering the precision would silently round every quantity
+	already stored — a data change disguised as a setting change. If Intacct's precision
+	drops, that is reported and left for a human.
+	"""
+	from frappe.utils import cint
+
+	wanted = max([cint(p) for p in seen_precisions if cint(p)] or [0])
+	if not wanted:
+		return {"changed": False, "reason": "Intacct returned no INV_PRECISION values"}
+
+	wanted = max(MIN_FLOAT_PRECISION, min(wanted, MAX_FLOAT_PRECISION))
+	current = cint(frappe.db.get_single_value("System Settings", "float_precision")) or 3
+
+	if wanted == current:
+		return {"changed": False, "precision": current}
+
+	if wanted < current:
+		return {
+			"changed": False,
+			"precision": current,
+			"intacct_precision": wanted,
+			"warning": (
+				f"Intacct's precision ({wanted}) is LOWER than ERPNext's ({current}). "
+				"Not lowered automatically — that would round every quantity already stored. "
+				"Change it deliberately if that is really what you want."
+			),
+		}
+
+	frappe.db.set_single_value("System Settings", "float_precision", str(wanted))
+	frappe.clear_cache()
+	return {
+		"changed": True,
+		"from": current,
+		"to": wanted,
+		"note": "Records written before this change keep their old rounding — re-import to rebuild them.",
+	}
 
 
 def _has_changes(doc):
