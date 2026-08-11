@@ -19,6 +19,12 @@ from fuse_manufacturing import gateway, rules
 # which is what a store-to-store move is. "In transit" parks it until received.
 IMMEDIATE = "Immediate"
 
+# Both of ERPNext's transfer-shaped purposes. They differ only in intent — one stages
+# components into a WIP warehouse ahead of a production run, the other is an ordinary move
+# — and Intacct does not care about the intent: stock left one warehouse and arrived at
+# another. Leaving the WIP one out meant it moved stock in ERPNext and posted nothing.
+TRANSFER_PURPOSES = ("Material Transfer", "Material Transfer for Manufacture")
+
 # Valid ACTION depends on TRANSFERTYPE: Immediate → Draft|Post. Sending "Submit" fails
 # with BL03002129 — proven on the donor.
 POST = "Post"
@@ -160,8 +166,8 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 	# submitted first, which inverts the Intacct-posts-first contract.
 	if not dry_run and doc.docstatus != 1:
 		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
-	if doc.purpose != "Material Transfer":
-		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Material Transfer.")
+	if doc.purpose not in TRANSFER_PURPOSES:
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a transfer.")
 
 	entity = gateway.entity_for_company(doc.company)
 
@@ -329,8 +335,8 @@ def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 	document with the warehouses swapped. Value follows the quantity — nothing to restate.
 	"""
 	doc = frappe.get_doc("Stock Entry", stock_entry)
-	if doc.purpose != "Material Transfer":
-		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Material Transfer.")
+	if doc.purpose not in TRANSFER_PURPOSES:
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a transfer.")
 
 	entity = gateway.entity_for_company(doc.company)
 
@@ -452,14 +458,14 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 # Which Stock Entry purposes post, and how.
 POSTED_PURPOSES = {
 	"Manufacture": post_stock_entry_manufacture,
-	"Material Transfer": post_stock_entry_transfer,
+	**{purpose: post_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
 }
 
 # And how each one is undone. Keyed the same way, so a purpose that can be posted but not
 # reversed is visible as a gap here rather than discovered at a cancel.
 REVERSED_PURPOSES = {
 	"Manufacture": reverse_stock_entry_manufacture,
-	"Material Transfer": reverse_stock_entry_transfer,
+	**{purpose: reverse_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
 }
 
 
