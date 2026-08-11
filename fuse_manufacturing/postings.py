@@ -312,7 +312,11 @@ def on_stock_entry_submit(doc, method=None):
 
 	result = handler(doc.name)
 
-	doc.db_set("custom_intacct_key", str(result.get("intacct_key") or (result.get("intacct_keys") or [""])[0]))
+	# A production run is TWO Intacct documents and both keys matter — keeping only the
+	# first left the produce leg traceable in the request log and nowhere else. Joined,
+	# because anyone reconciling needs to find either document from the Stock Entry.
+	keys = result.get("intacct_keys") or [result.get("intacct_key")]
+	doc.db_set("custom_intacct_key", ", ".join(str(key) for key in keys if key))
 	doc.db_set("custom_intacct_posted_on", frappe.utils.now_datetime())
 
 
