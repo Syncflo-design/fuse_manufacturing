@@ -190,21 +190,15 @@ def _post(cfg, request_element, retry=True):
 
 
 def _check_result(root):
-	"""Raise on any failure Intacct reports, with its own error text.
+	"""Raise on anything Intacct did not accept, with its own error text.
 
-	Intacct returns HTTP 200 for business rejections, so the status has to be read out
-	of the body or a failed post looks like a success.
+	The decision lives in rules.rejection_errors so it can be tested without a site — it
+	is the single point at which a rejected posting is stopped from being recorded as a
+	successful one.
 	"""
-	for status in root.iter("status"):
-		if (status.text or "").strip().lower() == "failure":
-			errors = []
-			for error in root.iter("error"):
-				parts = [
-					(error.findtext(tag) or "").strip()
-					for tag in ("errorno", "description", "description2", "correction")
-				]
-				errors.append(" | ".join(p for p in parts if p))
-			frappe.throw("Intacct rejected the request:\n" + "\n".join(errors or ["no error detail returned"]))
+	errors = rules.rejection_errors(root)
+	if errors:
+		frappe.throw("Intacct rejected the request:\n" + "\n".join(errors))
 	return root
 
 

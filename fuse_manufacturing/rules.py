@@ -164,6 +164,40 @@ def result_keys(root):
 	return keys
 
 
+def rejection_errors(root):
+	"""Every error Intacct reported, or an empty list if it accepted the request.
+
+	Anything that is not the word "success" is a rejection. That is deliberately a
+	whitelist: the first version tested for "failure" and let `aborted` through, so a
+	transaction Intacct had rolled back was recorded as a successful post. The ERPNext
+	side then proceeded on the strength of it, and the two systems disagreed about stock
+	that had physically moved — precisely what posting-first is supposed to prevent.
+
+	Intacct returns HTTP 200 for business rejections, so this is the only thing standing
+	between a rejected posting and a document that claims it succeeded. It is checked at
+	EVERY level: control, authentication and each individual result.
+	"""
+	if isinstance(root, str):
+		root = ET.fromstring(root)
+
+	rejected = any(
+		(status.text or "").strip().lower() not in ("", "success") for status in root.iter("status")
+	)
+	if not rejected:
+		return []
+
+	errors = []
+	for error in root.iter("error"):
+		parts = [
+			(error.findtext(tag) or "").strip()
+			for tag in ("errorno", "description", "description2", "correction")
+		]
+		joined = " | ".join(part for part in parts if part)
+		if joined:
+			errors.append(joined)
+	return errors or ["Intacct reported a non-success status with no error detail"]
+
+
 def transfer_legs(lines):
 	"""Turn transfer lines into Intacct's two-leg form.
 

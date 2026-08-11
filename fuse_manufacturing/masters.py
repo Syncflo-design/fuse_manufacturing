@@ -102,7 +102,8 @@ def list_transaction_definitions(company=None):
 	rows = gateway.query(
 		"INVDOCUMENTPARAMS",
 		["RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "IN_OUT", "UPDATES_COST",
-		 "UPDATES_INV", "CREATETYPE", "STATUS"],
+		 "UPDATES_INV", "CREATETYPE", "STATUS", "ENABLE_SEQNUM", "SEQUENCE",
+		 "INHERIT_SOURCE_DOCNO"],
 		company=company,
 	)
 
@@ -116,6 +117,12 @@ def list_transaction_definitions(company=None):
 			"updates_inventory": val(row, "UPDATES_INV"),
 			"create_type": val(row, "CREATETYPE"),
 			"status": val(row, "STATUS"),
+			# Whether Intacct numbers the document itself. Without a numbering scheme the
+			# post is rejected with PL01000127 "Document Number is missing" — which says
+			# nothing about numbering schemes and sends you looking at the line items.
+			"auto_numbered": val(row, "ENABLE_SEQNUM"),
+			"sequence": val(row, "SEQUENCE"),
+			"inherits_source_docno": val(row, "INHERIT_SOURCE_DOCNO"),
 		}
 		for row in rows
 	]
@@ -125,18 +132,49 @@ def list_transaction_definitions(company=None):
 	# surfacing later as a rejection nobody can place.
 	from fuse_manufacturing import postings
 
-	required = {postings.MANUFACTURING_CONSUME, postings.MANUFACTURING_PRODUCE}
+	required = {
+		postings.MANUFACTURING_CONSUME,
+		postings.MANUFACTURING_PRODUCE,
+		postings.MANUFACTURING_UNCONSUME,
+		postings.MANUFACTURING_UNPRODUCE,
+	}
 	present = {d["docid"] for d in definitions}
 	missing = sorted(required - present)
+
+	# Present but unusable is the harder failure to place: the definition exists, the name
+	# matches, and the post is still rejected. Reported alongside missing so a new client's
+	# gaps are visible at sync time rather than at the first cancel.
+	not_numbered = sorted(
+		d["docid"]
+		for d in definitions
+		if d["docid"] in required
+		and str(d["auto_numbered"]).strip().lower() not in ("true", "1")
+		and not d["inherits_source_docno"]
+	)
+	unpostable = sorted(
+		d["docid"] for d in definitions
+		if d["docid"] in required and "convert only" in (d["create_type"] or "").lower()
+	)
+
+	problems = []
+	if missing:
+		problems.append(f"missing: {', '.join(missing)} — the name must match exactly")
+	if not_numbered:
+		problems.append(
+			f"no numbering scheme: {', '.join(not_numbered)} — will be rejected with "
+			"PL01000127 'Document Number is missing' until one is attached in Intacct"
+		)
+	if unpostable:
+		problems.append(f"convert-only: {', '.join(unpostable)} — cannot be created directly")
 
 	return {
 		"count": len(definitions),
 		"definitions": definitions,
 		"required_by_postings": sorted(required),
 		"missing": missing,
-		"note": "Missing means the posting will be rejected — the name must match exactly."
-		if missing
-		else "All definitions the postings use are present.",
+		"not_numbered": not_numbered,
+		"unpostable": unpostable,
+		"note": "; ".join(problems) if problems else "All definitions the postings use are present and usable.",
 	}
 
 
