@@ -83,6 +83,15 @@ MANUFACTURING_CONSUME = "Manufacturing Backflush Decr"    # Decrease, UPDATES_CO
 MANUFACTURING_UNPRODUCE = "Manufacturing Run Decrease"    # Decrease, UPDATES_COST=false
 MANUFACTURING_UNCONSUME = "Manufacturing Backflush Incr"  # Increase, UPDATES_COST=true
 
+# Stock adjustments. Intacct's own cycle-count definitions — active and postable in
+# leadertread-imp, so nothing new has to be created for these. Neither carries a numbering
+# scheme, so Fuse supplies the document number as it does for reversals.
+ADJUSTMENT_INCREASE = "SYS-CC Adjustment Increase"        # Increase, UPDATES_COST=true
+ADJUSTMENT_DECREASE = "SYS-CC Adjustment Decrease"        # Decrease, UPDATES_COST=false
+
+# ERPNext purposes that adjust on-hand quantity, and which way each goes.
+ADJUSTMENT_PURPOSES = {"Material Receipt": True, "Material Issue": False}
+
 
 def build_ictransaction_xml(*, definition, posting_date, reference_no, lines, location_id,
                             document_no=None):
@@ -277,6 +286,123 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 	return {"posted": True, "intacct_keys": keys, "unit_cost": legs["produce"][0]["cost"]}
 
 
+def _adjustment_lines(doc, increase):
+	"""The lines of an adjustment, taken from whichever side of the row carries a warehouse.
+
+	A receipt fills t_warehouse and a issue fills s_warehouse, so one function reads both.
+	"""
+	lines = []
+	for row in doc.items:
+		warehouse = row.t_warehouse if increase else row.s_warehouse
+		lines.append(
+			{
+				"item_code": row.item_code,
+				"qty": row.qty,
+				# From the Item, never the header — BL03000018 otherwise.
+				"uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
+				"warehouse": _intacct_warehouse(warehouse),
+				"rate": row.valuation_rate or row.basic_rate or 0,
+				"bin": _default_bin(warehouse, row.item_code),
+			}
+		)
+	return lines
+
+
+@frappe.whitelist()
+def post_stock_entry_adjustment(stock_entry, dry_run=False):
+	"""Post an ERPNext Material Receipt or Material Issue to Intacct as a stock adjustment.
+
+	One document, one definition — unlike a production run, an adjustment only moves one
+	way, so there is nothing to pair it with.
+
+	Deliberately NOT wired to Stock Reconciliation: that is the doctype the opening stock
+	sync uses, and opening stock came FROM Intacct. Posting it back would double every
+	balance on the day the site went live.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+
+	increase = ADJUSTMENT_PURPOSES.get(doc.purpose)
+	if increase is None:
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a stock adjustment.")
+	if not dry_run and doc.docstatus != 1:
+		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
+
+	entity = gateway.entity_for_company(doc.company)
+	legs = rules.adjustment_legs(_adjustment_lines(doc, increase), increase=increase)
+
+	function = build_ictransaction_xml(
+		definition=ADJUSTMENT_INCREASE if increase else ADJUSTMENT_DECREASE,
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "adjustment"),
+		lines=legs,
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"entity": entity,
+			"direction": "increase" if increase else "decrease",
+			"xml": ET.tostring(function, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[function],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose="adjustment",
+	)
+	return {"posted": True, "intacct_keys": keys, "lines": len(legs)}
+
+
+@frappe.whitelist()
+def reverse_stock_entry_adjustment(stock_entry, dry_run=False):
+	"""Undo an adjustment by posting the opposite one.
+
+	The direction flips, and with it which definition values the movement — so a reversed
+	receipt goes out at Intacct's valuation, and a reversed issue comes back in at the rate
+	it left at.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+
+	posted_increase = ADJUSTMENT_PURPOSES.get(doc.purpose)
+	if posted_increase is None:
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a stock adjustment.")
+
+	increase = not posted_increase
+	entity = gateway.entity_for_company(doc.company)
+	# Warehouses still come from the side the ORIGINAL used — the stock is going back
+	# exactly where it came from, so the row is read the same way round.
+	legs = rules.adjustment_legs(_adjustment_lines(doc, posted_increase), increase=increase)
+
+	function = build_ictransaction_xml(
+		definition=ADJUSTMENT_INCREASE if increase else ADJUSTMENT_DECREASE,
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "adjustment-reverse"),
+		lines=legs,
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"reversal": True,
+			"entity": entity,
+			"direction": "increase" if increase else "decrease",
+			"xml": ET.tostring(function, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[function],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose="adjustment-reverse",
+	)
+	return {"reversed": True, "intacct_keys": keys}
+
+
 def _manufacture_rows(doc):
 	"""The consumed and produced rows of a Manufacture entry, as the postings want them.
 
@@ -459,6 +585,7 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 POSTED_PURPOSES = {
 	"Manufacture": post_stock_entry_manufacture,
 	**{purpose: post_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
+	**{purpose: post_stock_entry_adjustment for purpose in ADJUSTMENT_PURPOSES},
 }
 
 # And how each one is undone. Keyed the same way, so a purpose that can be posted but not
@@ -466,6 +593,7 @@ POSTED_PURPOSES = {
 REVERSED_PURPOSES = {
 	"Manufacture": reverse_stock_entry_manufacture,
 	**{purpose: reverse_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
+	**{purpose: reverse_stock_entry_adjustment for purpose in ADJUSTMENT_PURPOSES},
 }
 
 

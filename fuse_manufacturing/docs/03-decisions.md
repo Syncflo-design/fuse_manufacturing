@@ -488,3 +488,22 @@ golden-source principle forbids, so it waits for someone to decide the allocatio
 - Leadertread's compounds are single-output, so nothing they do today is blocked.
 - Substitution is unaffected and needs no special handling: a swapped raw material is just
   a different consumed row, which is why the postings go leg-by-leg rather than by BOM.
+
+## 2026-08-11 — Stock adjustments use Intacct's cycle-count definitions
+
+**Decision:** Material Receipt posts `SYS-CC Adjustment Increase`, Material Issue posts
+`SYS-CC Adjustment Decrease`. One document, one definition — an adjustment only moves one
+way, so there is nothing to pair it with.
+**Why:** both are already active and postable in `leadertread-imp`, so adjustments need no
+new Intacct configuration. Neither carries a numbering scheme, so Fuse supplies the
+document number as it does for reversals.
+**Consequences:**
+- The increase values the movement (UPDATES_COST=true) and carries a cost; the decrease
+  does not, so Intacct removes stock at its own valuation. A zero cost on the increase is
+  refused, not sent — it would overwrite the item's valuation with nothing.
+- **Stock Reconciliation is deliberately NOT wired.** It is the doctype the opening stock
+  sync uses, and opening stock came FROM Intacct. Posting it back would double every
+  balance on the day a site went live. Adjustments are Material Receipt and Material Issue
+  only.
+- Adjustments carry bins, because they go through `create_ictransaction` — so unlike
+  transfers, they already work for the 32 bin-tracked items.
