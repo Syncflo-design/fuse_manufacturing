@@ -137,6 +137,8 @@ def list_transaction_definitions(company=None):
 		postings.MANUFACTURING_PRODUCE,
 		postings.MANUFACTURING_UNCONSUME,
 		postings.MANUFACTURING_UNPRODUCE,
+		postings.ADJUSTMENT_INCREASE,
+		postings.ADJUSTMENT_DECREASE,
 	}
 	present = {d["docid"] for d in definitions}
 	missing = sorted(required - present)
@@ -157,9 +159,14 @@ def list_transaction_definitions(company=None):
 	unnumbered = [d["docid"] for d in definitions if d["docid"] in required and not is_true(d["auto_numbered"])]
 	not_numbered = sorted(docid for docid in unnumbered if docid not in fuse_numbers)
 	numbered_by_fuse = sorted(docid for docid in unnumbered if docid in fuse_numbers)
+	# CREATETYPE cannot be trusted for SYS- definitions. `SYS-CC Adjustment Increase` reports
+	# "New document or Convert" and is still rejected at post time with "cannot be created
+	# directly — use Cycle Count to create this document". They belong to Intacct's own
+	# features and are only reachable through them, whatever the field says.
 	unpostable = sorted(
 		d["docid"] for d in definitions
-		if d["docid"] in required and "convert only" in (d["create_type"] or "").lower()
+		if d["docid"] in required
+		and ("convert only" in (d["create_type"] or "").lower() or d["docid"].startswith("SYS-"))
 	)
 
 	problems = []

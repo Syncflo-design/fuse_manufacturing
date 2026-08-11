@@ -1,36 +1,43 @@
-# after_migrate does not reliably fire on a Frappe Cloud deploy
+# A Frappe Cloud deploy can succeed without the site running your latest commit
 
 **Seen:** 2026-08-11, leadertread-imp.
 
-A deploy shipped new code AND two new Custom Field definitions. The code arrived —
-`reverse_stock_entry_manufacture` was callable — but the fields did not exist, so the
-posting wrote to a field that was not there.
+Twice in one session, code appeared not to have deployed. The first diagnosis was that
+`after_migrate` was not firing. **That was wrong.** The site was simply running an earlier
+commit, which had nothing new to create.
 
-`hooks.py` had it wired correctly the whole time:
+## What actually happened
 
-```python
-after_install = "fuse_manufacturing.install.after_install"
-after_migrate = "fuse_manufacturing.install.after_install"
+The bench's **Apps** tab showed `fuse_theme` at the newest commit with status "Latest
+Version". The site was still serving the previous one. The Apps tab shows the commit the
+bench is pinned to — a deploy has to be started *after* that pinning for the site to run it.
+A deploy that completed earlier the same afternoon did not contain the commits pushed after
+it started.
+
+## How to tell what the site is ACTUALLY running
+
+Do not trust the bench's Apps tab, and do not trust `frappe.utils.change_log.get_versions`
+— it returns the version from `pyproject.toml` (`0.1.0` for both our apps regardless of
+commit), not the commit.
+
+Call something that only exists in the new code, and check for a value only the new code
+returns:
+
+```
+fuse_manufacturing.masters.run_now  job=definitions
 ```
 
-## How to tell, without bench access
+`required_by_postings` listing four definitions instead of six proved the site predated the
+commit that added the adjustment definitions. A missing whitelisted method — `gateway.read`
+raising "module has no attribute" — proved the same thing in one call.
 
-Change the `description` of an EXISTING custom field in the same commit, then read it back
-after the deploy. `create_custom_fields` updates existing fields, so if the description is
-still the old text, `after_migrate` did not run. Ours still said the old text with a
-`modified` date four days earlier.
+Pick a marker per deploy and check it. It takes one call and replaces an afternoon of
+theorising about framework internals.
 
-Do not test by checking whether the NEW field exists — you cannot tell a hook that did not
-run from a hook that ran and failed.
+## Do not conclude "the hook did not fire"
 
-## Fix
-
-`masters.run_now("setup")` re-applies every custom field and role. Idempotent, whitelisted,
-runnable from the desk. Run it after any deploy that adds or changes a field.
-
-The Error Log showed nothing, so there is no failure to find — the hook simply did not
-fire. Do not go looking for an exception.
-
-**Wider point:** the fresh-install promise depends on this hook. Until we know why it
-skipped, treat "installing the app configures the site" as unproven on Frappe Cloud, and
-run `setup` explicitly.
+There is no evidence `after_install` / `after_migrate` are unreliable on Frappe Cloud. Both
+apps wire them, and both also expose the same function as a whitelisted call
+(`masters.run_now("setup")`, `fuse_theme.api.setup`). Those remain useful — re-applying
+fields and workspaces on demand without bench access is worth having — but they are a
+convenience, not a workaround for a framework bug.

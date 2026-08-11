@@ -364,6 +364,42 @@ def query(object_name, fields, filter_xml=None, page_size=None, entity_id=None, 
 
 
 @frappe.whitelist()
+def read(object_name, fields=None, filters=None, page_size=50, company=None):
+	"""Read rows from any Intacct object. READ ONLY, and System Manager only.
+
+	Diagnosis, not a data path. Repeatedly the fastest way to settle a question has been to
+	look at what Intacct actually holds — which transaction definitions a client has really
+	used, what a working document looks like — rather than reason about what it should hold.
+	Without this that means a code change and a deploy to ask one question.
+
+	`fields` is a list of field names. `filters` is raw filter XML, passed through verbatim
+	the way query() takes it — e.g.
+	    "<equalto><field>DOCTYPE</field><value>Stock Adjustment</value></equalto>"
+
+	Both arrive as JSON strings over HTTP, hence the parsing.
+	"""
+	frappe.only_for("System Manager")
+
+	if isinstance(fields, str):
+		fields = frappe.parse_json(fields) if fields.strip().startswith("[") else [fields]
+
+	rows = query(
+		object_name,
+		fields or ["RECORDNO"],
+		filter_xml=filters or None,
+		# Capped low on purpose: this is for looking, not for pulling a master across.
+		page_size=min(int(page_size or 50), 200),
+		company=company,
+	)
+	return {
+		"object": object_name,
+		"count": len(rows),
+		# Elements out of query(), flattened to plain values so the result is readable.
+		"rows": [{child.tag: (child.text or "").strip() for child in row} for row in rows],
+	}
+
+
+@frappe.whitelist()
 def lookup(object_name, company=None):
 	"""Read an Intacct object's schema — its fields and their types.
 

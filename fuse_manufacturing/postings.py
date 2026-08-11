@@ -83,11 +83,17 @@ MANUFACTURING_CONSUME = "Manufacturing Backflush Decr"    # Decrease, UPDATES_CO
 MANUFACTURING_UNPRODUCE = "Manufacturing Run Decrease"    # Decrease, UPDATES_COST=false
 MANUFACTURING_UNCONSUME = "Manufacturing Backflush Incr"  # Increase, UPDATES_COST=true
 
-# Stock adjustments. Intacct's own cycle-count definitions — active and postable in
-# leadertread-imp, so nothing new has to be created for these. Neither carries a numbering
-# scheme, so Fuse supplies the document number as it does for reversals.
-ADJUSTMENT_INCREASE = "SYS-CC Adjustment Increase"        # Increase, UPDATES_COST=true
-ADJUSTMENT_DECREASE = "SYS-CC Adjustment Decrease"        # Decrease, UPDATES_COST=false
+# Stock adjustments.
+#
+# NOT the SYS-CC cycle-count definitions. Those report CREATETYPE "New document or Convert"
+# and are still rejected at post time — "SYS-CC Adjustment Increase cannot be created
+# directly, use Cycle Count to create this document". SYS- definitions belong to Intacct's
+# own features and are only reachable through them, whatever CREATETYPE claims.
+#
+# These two are created per client, alongside the Stock Transfer pair. Same settings shape:
+# Adjustment class, Quantity and Value, cost on the increase only.
+ADJUSTMENT_INCREASE = "Stock Adjustment Increase"         # Increase, UPDATES_COST=true
+ADJUSTMENT_DECREASE = "Stock Adjustment Decrease"         # Decrease, UPDATES_COST=false
 
 # ERPNext purposes that adjust on-hand quantity, and which way each goes.
 ADJUSTMENT_PURPOSES = {"Material Receipt": True, "Material Issue": False}
