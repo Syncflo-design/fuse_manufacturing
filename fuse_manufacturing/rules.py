@@ -329,6 +329,64 @@ def manufacture_legs(consumed, produced_item, produced_qty, produced_uom, wareho
 	}
 
 
+def classify_manufacture_rows(rows):
+	"""Split a Manufacture entry's rows into what was consumed and what was produced.
+
+	Returns {"consumed": [...], "produced": row or None, "problems": [...]}. Problems are
+	sentences for a human; a caller with any of them must refuse to post.
+
+	The refusals exist because the first version classified by elimination — finished item,
+	else anything with a source warehouse, else skip — and that quietly dropped rows:
+
+	  TWO finished items       the second overwrote the first, so a co-product posted as if
+	                           the other had never been made
+	  a row with a destination
+	  and no source            skipped entirely, so scrap output reached Intacct as nothing
+
+	Both are refused rather than handled, because handling them means splitting one
+	production cost across several outputs, and there is no non-arbitrary way to do that.
+	Quantity-weighted is wrong the moment two outputs are worth different amounts. When a
+	client actually needs co-products, someone decides the allocation rule and it gets
+	built — until then a loud stop beats a wrong number in the accounts.
+	"""
+	consumed, produced, problems = [], None, []
+	finished = [row for row in rows if row.get("is_finished_item")]
+
+	if len(finished) > 1:
+		names = ", ".join(str(row.get("item_code")) for row in finished)
+		problems.append(
+			f"This entry produces more than one finished item ({names}). Fuse cannot split "
+			"one production cost across several outputs without inventing the split, so it "
+			"will not post it. Produce them on separate entries."
+		)
+	elif finished:
+		produced = finished[0]
+
+	for row in rows:
+		if row.get("is_finished_item"):
+			continue
+		if row.get("s_warehouse"):
+			consumed.append(row)
+			continue
+		if row.get("t_warehouse"):
+			# Output that is not the finished item: scrap, a by-product, a rework return.
+			problems.append(
+				f"{row.get('item_code')} is produced by this entry but is not the finished "
+				"item, so Fuse has no cost for it and will not post it. Scrap and "
+				"by-products are not supported yet."
+			)
+		else:
+			problems.append(
+				f"{row.get('item_code')} has neither a source nor a destination warehouse. "
+				"Fuse cannot tell which way it moved."
+			)
+
+	if not produced and not problems:
+		problems.append("This entry has no finished item — nothing was produced.")
+
+	return {"consumed": consumed, "produced": produced, "problems": problems}
+
+
 def manufacture_reversal_legs(consumed, produced_item, produced_qty, produced_uom, warehouse):
 	"""The two legs that undo a production run.
 

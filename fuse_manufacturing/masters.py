@@ -144,13 +144,19 @@ def list_transaction_definitions(company=None):
 	# Present but unusable is the harder failure to place: the definition exists, the name
 	# matches, and the post is still rejected. Reported alongside missing so a new client's
 	# gaps are visible at sync time rather than at the first cancel.
-	not_numbered = sorted(
-		d["docid"]
-		for d in definitions
-		if d["docid"] in required
-		and str(d["auto_numbered"]).strip().lower() not in ("true", "1")
-		and not d["inherits_source_docno"]
-	)
+	def is_true(value):
+		# Intacct returns these as the STRINGS "true"/"false". Testing them for truthiness
+		# passes "false", which is how a definition with no numbering read as fine.
+		return str(value).strip().lower() in ("true", "1")
+
+	# Fuse sends its own documentno on these, so Intacct not numbering them is expected
+	# rather than a fault. INHERIT_SOURCE_DOCNO does not help — it only applies when a
+	# document is created by converting another, and these are created directly.
+	fuse_numbers = {postings.MANUFACTURING_UNCONSUME, postings.MANUFACTURING_UNPRODUCE}
+
+	unnumbered = [d["docid"] for d in definitions if d["docid"] in required and not is_true(d["auto_numbered"])]
+	not_numbered = sorted(docid for docid in unnumbered if docid not in fuse_numbers)
+	numbered_by_fuse = sorted(docid for docid in unnumbered if docid in fuse_numbers)
 	unpostable = sorted(
 		d["docid"] for d in definitions
 		if d["docid"] in required and "convert only" in (d["create_type"] or "").lower()
@@ -167,14 +173,22 @@ def list_transaction_definitions(company=None):
 	if unpostable:
 		problems.append(f"convert-only: {', '.join(unpostable)} — cannot be created directly")
 
+	note = "; ".join(problems) if problems else "All definitions the postings use are present and usable."
+	if numbered_by_fuse and not problems:
+		note += (
+			f" ({', '.join(numbered_by_fuse)} have no numbering scheme, so Fuse supplies the "
+			"document number. Attach a scheme in Intacct and that can be dropped.)"
+		)
+
 	return {
 		"count": len(definitions),
 		"definitions": definitions,
 		"required_by_postings": sorted(required),
 		"missing": missing,
 		"not_numbered": not_numbered,
+		"numbered_by_fuse": numbered_by_fuse,
 		"unpostable": unpostable,
-		"note": "; ".join(problems) if problems else "All definitions the postings use are present and usable.",
+		"note": note,
 	}
 
 
@@ -1480,10 +1494,21 @@ JOBS = {
 	"opening_stock": "post_opening_stock",
 	"drift": "stock_drift_report",
 	"remove_defaults": "remove_erpnext_defaults",
+	# Re-applies the app's own custom fields and roles. Needed because after_migrate does
+	# not reliably fire on a Frappe Cloud deploy — the code ships and the field definitions
+	# do not. Idempotent, so running it is never wrong.
+	"setup": "_run_setup",
 	# Used by the scheduler, not normally queued by hand.
 	"items_incremental": "_sync_items_incremental",
 	"config": "_sync_config",
 }
+
+
+def _run_setup(company=None):
+	"""Re-apply the custom fields and roles this version of the app expects."""
+	from fuse_manufacturing.install import after_install
+
+	return after_install()
 
 
 @frappe.whitelist()

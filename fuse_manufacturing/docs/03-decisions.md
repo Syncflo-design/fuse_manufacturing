@@ -471,3 +471,20 @@ the number, deal with the Intacct config later — the system has to work now.
   cost, so nothing about Intacct's books depends on it — but it is a deviation from the
   golden-source principle and should be undone once the templates are configured. The
   `definitions` job now reports `not_numbered`, so the day it can be undone is visible.
+
+## 2026-08-11 — Co-products and scrap are refused, not guessed
+
+**Decision:** a Manufacture entry with more than one finished item, or with output that is
+not the finished item (scrap, by-product), is refused with a message naming the rows.
+**Why:** both were silently dropped. Classification worked by elimination — finished item,
+else anything with a source warehouse, else skip — so a second finished item overwrote the
+first and any row with a destination and no source vanished. Intacct received less than
+happened, with nothing logged.
+**Why refuse rather than support:** handling them means splitting one production cost
+across several outputs, and there is no non-arbitrary rule. Quantity-weighted is wrong the
+moment two outputs are worth different amounts. Inventing the split is exactly what the
+golden-source principle forbids, so it waits for someone to decide the allocation rule.
+**Consequences:**
+- Leadertread's compounds are single-output, so nothing they do today is blocked.
+- Substitution is unaffected and needs no special handling: a swapped raw material is just
+  a different consumed row, which is why the postings go leg-by-leg rather than by BOM.

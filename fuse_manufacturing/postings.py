@@ -278,32 +278,46 @@ def _manufacture_rows(doc):
 	components at the rate they left at, so reading them any other way is a chance for the
 	two to disagree.
 	"""
-	consumed = []
-	produced = None
-	for row in doc.items:
-		# The unit must match the item's UOM character for character or the line is
-		# rejected with BL03000018. Taken from the Item, never from the header.
-		unit = frappe.db.get_value("Item", row.item_code, "stock_uom")
-		if row.is_finished_item:
-			produced = {"item_code": row.item_code, "qty": row.qty, "uom": unit, "warehouse": row.t_warehouse}
-			continue
-		if not row.s_warehouse:
-			continue
-		consumed.append(
+	split = rules.classify_manufacture_rows(
+		[
 			{
 				"item_code": row.item_code,
 				"qty": row.qty,
-				"uom": unit,
-				"warehouse": _intacct_warehouse(row.s_warehouse),
-				# The rate ERPNext holds came from Intacct's opening cost, so deriving
-				# the produced cost from it is Intacct's own money, not a local invention.
+				"is_finished_item": row.is_finished_item,
+				"s_warehouse": row.s_warehouse,
+				"t_warehouse": row.t_warehouse,
 				"rate": row.valuation_rate or row.basic_rate or 0,
-				"bin": _default_bin(row.s_warehouse, row.item_code),
 			}
-		)
+			for row in doc.items
+		]
+	)
+	if split["problems"]:
+		# Refused, not worked around. Every one of these used to be a silently dropped row.
+		frappe.throw(f"{doc.name} cannot be posted to Intacct:\n\n" + "\n\n".join(split["problems"]))
 
-	if not produced:
-		frappe.throw(f"{doc.name} has no finished item — nothing was produced.")
+	# The unit must match the item's UOM character for character or the line is rejected
+	# with BL03000018. Taken from the Item, never from the header — the header carries
+	# ERPNext's own default, which is routinely "Nos" on an item measured in kilograms.
+	def unit_for(item_code):
+		return frappe.db.get_value("Item", item_code, "stock_uom")
+
+	produced = dict(split["produced"])
+	produced["uom"] = unit_for(produced["item_code"])
+	produced["warehouse"] = produced["t_warehouse"]
+
+	consumed = [
+		{
+			"item_code": row["item_code"],
+			"qty": row["qty"],
+			"uom": unit_for(row["item_code"]),
+			"warehouse": _intacct_warehouse(row["s_warehouse"]),
+			# The rate ERPNext holds came from Intacct's opening cost, so deriving the
+			# produced cost from it is Intacct's own money, not a local invention.
+			"rate": row["rate"],
+			"bin": _default_bin(row["s_warehouse"], row["item_code"]),
+		}
+		for row in split["consumed"]
+	]
 	return consumed, produced
 
 

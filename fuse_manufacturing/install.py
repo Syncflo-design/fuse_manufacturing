@@ -183,7 +183,18 @@ ROLE = "Stock Controller"
 
 
 def after_install():
-	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
+	"""Put the site's Fuse-owned configuration in step with this version of the app.
+
+	Wired to after_install AND after_migrate, and safe to run at any time — everything here
+	is idempotent, so re-running only closes gaps.
+
+	It is also exposed as the `setup` sync job, because after_migrate has been observed NOT
+	to fire on a Frappe Cloud deploy: on 2026-08-11 the code shipped and the field
+	definitions did not, leaving a posting writing to a field that did not exist. Without a
+	way to run this from the desk that needs bench access to repair, which on Frappe Cloud
+	means a support ticket.
+	"""
+	created = create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
 
 	if not frappe.db.exists("Role", ROLE):
 		frappe.get_doc(
@@ -191,3 +202,10 @@ def after_install():
 		).insert(ignore_permissions=True)
 
 	frappe.db.commit()
+
+	return {
+		"custom_fields": sum(len(fields) for fields in CUSTOM_FIELDS.values()),
+		"doctypes": sorted(CUSTOM_FIELDS),
+		"created_or_updated": created,
+		"role": ROLE,
+	}
