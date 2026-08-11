@@ -9,6 +9,7 @@ order. Keeping them out of masters.py is what makes them testable at all.
 """
 
 import hashlib
+import xml.etree.ElementTree as ET
 
 # Bump to force a full BOM rebuild when something OUTSIDE the recipe changes how a BOM is
 # written. v2 = site float precision raised 3 → 4 to match Intacct's quantities.
@@ -134,6 +135,33 @@ def is_stock_item(item_type):
 	"""
 	normalised = (item_type or "").strip().lower()
 	return normalised == "inventory" or "stockable kit" in normalised
+
+
+def result_keys(root):
+	"""The record key from each <result>, whichever form Intacct returned it in.
+
+	Two shapes, and only handling one of them loses the key silently:
+	  create_ictransaction and friends return <result><key>123</key></result>
+	  the generic <create> returns the object itself —
+	    <result><data><ictransfer><RECORDNO>23</RECORDNO></ictransfer></data></result>
+
+	Observed live: the first warehouse transfer posted successfully and came back with
+	no key at all, because only <key> was being read. The posting was fine; the
+	traceability was not.
+
+	One entry per result, in order, so a caller can line keys up with the functions it
+	sent. None where a result carried no key.
+	"""
+	if isinstance(root, str):
+		root = ET.fromstring(root)
+
+	keys = []
+	for result in root.iter("result"):
+		key = result.findtext(".//key")
+		if key is None:
+			key = result.findtext(".//RECORDNO")
+		keys.append(key.strip() if key else None)
+	return keys
 
 
 def transfer_legs(lines):

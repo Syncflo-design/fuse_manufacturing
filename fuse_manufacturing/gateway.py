@@ -486,7 +486,7 @@ def execute_many(function_elements, entity_id=None, company=None, reference=None
 		)
 		raise
 
-	keys = [el.text for el in root.iter("key")]
+	keys = rules.result_keys(root)
 	if len(keys) < len(function_elements):
 		# Pad rather than let positions shift: caller indexes these against the functions
 		# it sent, and a silently shortened list would attribute one function's key to

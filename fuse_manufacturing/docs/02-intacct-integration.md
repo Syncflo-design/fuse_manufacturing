@@ -129,9 +129,22 @@ Verified by reading the source, not assumed.
 | Goods receipt | `create_potransaction` | `PO Receiver-Inventory`, as a **conversion** of the PO |
 
 ### Details that cost real debugging
-- **`Manufacturing Run Decrease` and `Manufacturing Backflush Incr` are CONVERT-ONLY.** They
-  cannot be posted through `create_ictransaction` at all — they exist only by converting the
-  source document.
+- **`Manufacturing Run Decrease` and `Manufacturing Backflush Incr` are POSTABLE in
+  `leadertread-imp`** — verified 2026-08-07 by reading `INVDOCUMENTPARAMS`: both are
+  active with `CREATETYPE = "New document or Convert"`.
+
+  The donor's source comments say convert-only, and this doc said the same until now.
+  That was wrong for this company. **Definitions are per-company configuration** — check
+  with the `definitions` job on every client rather than carrying this forward as fact.
+
+  It matters because it decides reversal: a cancellation can post the opposite pair
+  directly rather than having to convert the original document. Cost flags mirror the
+  forward pair — `Backflush Incr` carries cost (UPDATES_COST=true), `Run Decrease` does
+  not.
+- `SYS-Warehouse Transfer In` / `Out` ARE convert-only. Intacct drives them itself from
+  the ICTRANSFER document; never post them directly.
+- `Build Kits` / `Disassemble Kits` are **inactive** in this company — consistent with
+  using the works-order flow rather than Intacct's kit conversion.
 - **Cost is sent only when the definition has `UPDATES_COST=true`.** On a consume leg, leave it
   null or you override Intacct's own valuation.
 - **Warehouse transfer is one document with both legs**, not two adjustments. `InOut` is

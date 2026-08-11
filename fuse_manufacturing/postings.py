@@ -138,7 +138,10 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 	"""
 	doc = frappe.get_doc("Stock Entry", stock_entry)
 
-	if doc.docstatus != 1:
+	# A dry run works on a DRAFT on purpose: the point is to read the XML before the
+	# document is committed. Requiring a submitted document forced the entry to be
+	# submitted first, which inverts the Intacct-posts-first contract.
+	if not dry_run and doc.docstatus != 1:
 		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
 	if doc.purpose != "Material Transfer":
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Material Transfer.")
@@ -197,7 +200,8 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 	"""
 	doc = frappe.get_doc("Stock Entry", stock_entry)
 
-	if doc.docstatus != 1:
+	# As above: a dry run reads a draft, so the XML can be checked before committing.
+	if not dry_run and doc.docstatus != 1:
 		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
 	if doc.purpose != "Manufacture":
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Manufacture.")
