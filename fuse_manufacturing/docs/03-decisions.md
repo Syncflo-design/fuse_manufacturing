@@ -454,3 +454,20 @@ consumed at, read from the same rows the forward post used.
 **Decision:** the DESCRIPTION on posted documents reads `Fuse <name>`. Internal messages
 that describe ERPNext's own behaviour keep saying ERPNext, because that is what they mean.
 **Why:** the client bought Fuse. The platform it runs on is not their concern.
+
+## 2026-08-11 — Fuse supplies the document number on reversals
+
+**Decision:** the reversal legs carry a Fuse-generated `documentno` (`FR-<hash>-<leg>`).
+**Why:** neither reversal definition has a numbering scheme attached in `leadertread-imp`,
+so Intacct rejects them with `PL01000127 "Document Number is missing"`. Attaching one is a
+template setting needing admin rights on the company. Russell's call, 2026-08-11: supply
+the number, deal with the Intacct config later — the system has to work now.
+**Consequences:**
+- The `FR-` prefix and non-numeric body mean it can never collide with a number Intacct
+  issues, including if a scheme is attached to these templates afterwards.
+- Deterministic from the Stock Entry name, so a retried reversal reuses the number instead
+  of creating a second document.
+- **This is the one place Fuse invents a value.** It is an identifier, not a quantity or a
+  cost, so nothing about Intacct's books depends on it — but it is a deviation from the
+  golden-source principle and should be undone once the templates are configured. The
+  `definitions` job now reports `not_numbered`, so the day it can be undone is visible.

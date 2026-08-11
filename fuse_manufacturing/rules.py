@@ -47,6 +47,29 @@ def control_id_for(doctype, name, purpose=""):
 	return f"fuse-{hashlib.sha1(raw.encode()).hexdigest()[:16]}"
 
 
+def document_number_for(doctype, name, purpose, index=1):
+	"""A document number for a definition Intacct will not number itself.
+
+	Intacct rejects a document with no number (PL01000127) when its template has no
+	numbering scheme attached. The forward manufacturing definitions have one; the two
+	reversal definitions in leadertread-imp do not, and switching that on needs admin
+	rights on the company. So Fuse supplies one.
+
+	Deliberately NOT numeric and prefixed "FR-": Intacct's own sequences are numeric with a
+	template prefix, so nothing we generate can ever collide with a number Intacct later
+	issues — including if someone attaches a numbering scheme to these templates after the
+	fact.
+
+	Deterministic, so a retried reversal reuses the same number rather than creating a
+	second document. `index` separates the legs of one reversal, which are two documents.
+
+	Kept short — the human link back to ERPNext is the reference number, which carries the
+	Stock Entry name in full.
+	"""
+	raw = f"{doctype}:{name}:{purpose}"
+	return f"FR-{hashlib.sha1(raw.encode()).hexdigest()[:10]}-{int(index)}"
+
+
 def decide_precision(seen_precisions, current):
 	"""What to do about float precision, given what Intacct uses and what ERPNext is on.
 

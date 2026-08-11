@@ -107,6 +107,32 @@ class TestManufactureReversal(unittest.TestCase):
 			self.assertAlmostEqual(movement, 0, msg=f"{item} did not net to zero")
 
 
+class TestReversalDocumentNumbers(unittest.TestCase):
+	"""Intacct will not number the reversal templates itself — PL01000127."""
+
+	def number(self, index=1, name="MAT-STE-2026-00002"):
+		return rules.document_number_for("Stock Entry", name, "manufacture-reverse", index)
+
+	def test_stable_for_the_same_leg(self):
+		"""A retried reversal must reuse the number, not create a second document."""
+		self.assertEqual(self.number(1), self.number(1))
+
+	def test_the_two_legs_differ(self):
+		"""They are two documents; one number would collide."""
+		self.assertNotEqual(self.number(1), self.number(2))
+
+	def test_different_entries_differ(self):
+		self.assertNotEqual(self.number(name="MAT-STE-2026-00002"), self.number(name="MAT-STE-2026-00003"))
+
+	def test_cannot_collide_with_an_intacct_sequence(self):
+		"""Intacct issues numeric numbers behind a template prefix; ours never look like that."""
+		self.assertTrue(self.number().startswith("FR-"))
+		self.assertFalse(self.number().replace("-", "").isdigit())
+
+	def test_short_enough_for_the_field(self):
+		self.assertLessEqual(len(self.number()), 20)
+
+
 class TestReversalControlIds(unittest.TestCase):
 	def test_reversal_id_differs_from_the_forward_post(self):
 		"""Same ID would make Intacct reject the reversal as a duplicate of the original."""

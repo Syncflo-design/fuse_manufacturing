@@ -78,10 +78,15 @@ MANUFACTURING_UNPRODUCE = "Manufacturing Run Decrease"    # Decrease, UPDATES_CO
 MANUFACTURING_UNCONSUME = "Manufacturing Backflush Incr"  # Increase, UPDATES_COST=true
 
 
-def build_ictransaction_xml(*, definition, posting_date, reference_no, lines, location_id):
+def build_ictransaction_xml(*, definition, posting_date, reference_no, lines, location_id,
+                            document_no=None):
 	"""A <create_ictransaction> function element.
 
 	One definition per document — which is why a production run is two of these, not one.
+
+	`document_no` is only supplied for definitions Intacct will not number itself. Element
+	order matters here: this is a legacy DTD-validated function, so documentno belongs
+	between datecreated and referenceno, not wherever is convenient.
 	"""
 	function = ET.Element("function")
 	transaction = ET.SubElement(function, "create_ictransaction")
@@ -94,6 +99,9 @@ def build_ictransaction_xml(*, definition, posting_date, reference_no, lines, lo
 	_text(date, "year", posting_date.year)
 	_text(date, "month", posting_date.month)
 	_text(date, "day", posting_date.day)
+
+	if document_no:
+		_text(transaction, "documentno", document_no)
 
 	if reference_no:
 		_text(transaction, "referenceno", reference_no)
@@ -380,10 +388,16 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 	)
 	legs["unproduce"][0]["bin"] = _default_bin(produced["warehouse"], produced["item_code"])
 
+	# Neither reversal definition has a numbering scheme attached in leadertread-imp, so
+	# Intacct rejects them with PL01000127 unless Fuse supplies the number. Deterministic,
+	# so a retry reuses it rather than creating a second document. If a client's Intacct
+	# admin ever attaches a scheme, these can simply stop being sent — the "FR-" prefix
+	# cannot collide with anything Intacct issues in the meantime.
 	unproduce_fn = build_ictransaction_xml(
 		definition=MANUFACTURING_UNPRODUCE,
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "manufacture-reverse", 1),
 		lines=legs["unproduce"],
 		location_id=entity,
 	)
@@ -391,6 +405,7 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 		definition=MANUFACTURING_UNCONSUME,
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "manufacture-reverse", 2),
 		lines=legs["unconsume"],
 		location_id=entity,
 	)
