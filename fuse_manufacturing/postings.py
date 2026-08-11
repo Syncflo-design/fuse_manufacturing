@@ -62,11 +62,20 @@ def build_transfer_xml(*, transaction_date, reference_no, description, legs, loc
 	return function
 
 
-# Manufacturing definitions, named exactly as Intacct holds them. The two reversal
-# definitions are CONVERT-ONLY — they cannot be created through create_ictransaction at
-# all — so they are not here.
-MANUFACTURING_PRODUCE = "Manufacturing Run Increase"      # IN_OUT=Increase, UPDATES_COST=true
-MANUFACTURING_CONSUME = "Manufacturing Backflush Decr"    # IN_OUT=Decrease, UPDATES_COST=false
+# Manufacturing definitions, named exactly as Intacct holds them.
+#
+# The donor's code says the two reversal definitions are convert-only. In leadertread-imp
+# both are active with CREATETYPE "New document or Convert", i.e. postable directly —
+# checked against INVDOCUMENTPARAMS, not assumed. Definitions are per-company
+# configuration, so the `definitions` job re-checks them on every client.
+#
+# Note the asymmetry in UPDATES_COST. It is the whole reason a reversal is not the forward
+# document negated: the cost sits on the increase leg either way, so it moves from the
+# finished goods to the components when the direction flips.
+MANUFACTURING_PRODUCE = "Manufacturing Run Increase"      # Increase, UPDATES_COST=true
+MANUFACTURING_CONSUME = "Manufacturing Backflush Decr"    # Decrease, UPDATES_COST=false
+MANUFACTURING_UNPRODUCE = "Manufacturing Run Decrease"    # Decrease, UPDATES_COST=false
+MANUFACTURING_UNCONSUME = "Manufacturing Backflush Incr"  # Increase, UPDATES_COST=true
 
 
 def build_ictransaction_xml(*, definition, posting_date, reference_no, lines, location_id):
@@ -168,7 +177,9 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 	function = build_transfer_xml(
 		transaction_date=doc.posting_date.strftime("%m/%d/%Y"),
 		reference_no=doc.name,
-		description=f"ERPNext {doc.name}",
+		# "Fuse" is what the client sees on the Intacct document — the product name, not the
+		# platform it happens to run on.
+		description=f"Fuse {doc.name}",
 		legs=legs,
 		location_id=entity,
 	)
@@ -207,31 +218,7 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Manufacture.")
 
 	entity = gateway.entity_for_company(doc.company)
-
-	consumed = []
-	produced = None
-	for row in doc.items:
-		unit = frappe.db.get_value("Item", row.item_code, "stock_uom")
-		if row.is_finished_item:
-			produced = {"item_code": row.item_code, "qty": row.qty, "uom": unit, "warehouse": row.t_warehouse}
-			continue
-		if not row.s_warehouse:
-			continue
-		consumed.append(
-			{
-				"item_code": row.item_code,
-				"qty": row.qty,
-				"uom": unit,
-				"warehouse": _intacct_warehouse(row.s_warehouse),
-				# The rate ERPNext holds came from Intacct's opening cost, so deriving
-				# the produced cost from it is Intacct's own money, not a local invention.
-				"rate": row.valuation_rate or row.basic_rate or 0,
-				"bin": _default_bin(row.s_warehouse, row.item_code),
-			}
-		)
-
-	if not produced:
-		frappe.throw(f"{stock_entry} has no finished item — nothing was produced.")
+	consumed, produced = _manufacture_rows(doc)
 
 	legs = rules.manufacture_legs(
 		consumed=consumed,
@@ -276,6 +263,159 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 	return {"posted": True, "intacct_keys": keys, "unit_cost": legs["produce"][0]["cost"]}
 
 
+def _manufacture_rows(doc):
+	"""The consumed and produced rows of a Manufacture entry, as the postings want them.
+
+	Shared by the forward post and its reversal on purpose: the reversal has to return the
+	components at the rate they left at, so reading them any other way is a chance for the
+	two to disagree.
+	"""
+	consumed = []
+	produced = None
+	for row in doc.items:
+		# The unit must match the item's UOM character for character or the line is
+		# rejected with BL03000018. Taken from the Item, never from the header.
+		unit = frappe.db.get_value("Item", row.item_code, "stock_uom")
+		if row.is_finished_item:
+			produced = {"item_code": row.item_code, "qty": row.qty, "uom": unit, "warehouse": row.t_warehouse}
+			continue
+		if not row.s_warehouse:
+			continue
+		consumed.append(
+			{
+				"item_code": row.item_code,
+				"qty": row.qty,
+				"uom": unit,
+				"warehouse": _intacct_warehouse(row.s_warehouse),
+				# The rate ERPNext holds came from Intacct's opening cost, so deriving
+				# the produced cost from it is Intacct's own money, not a local invention.
+				"rate": row.valuation_rate or row.basic_rate or 0,
+				"bin": _default_bin(row.s_warehouse, row.item_code),
+			}
+		)
+
+	if not produced:
+		frappe.throw(f"{doc.name} has no finished item — nothing was produced.")
+	return consumed, produced
+
+
+@frappe.whitelist()
+def reverse_stock_entry_transfer(stock_entry, dry_run=False):
+	"""Undo a posted warehouse transfer by posting the same move back the other way.
+
+	A transfer is one document carrying both halves, so its reversal is simply the same
+	document with the warehouses swapped. Value follows the quantity — nothing to restate.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+	if doc.purpose != "Material Transfer":
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Material Transfer.")
+
+	entity = gateway.entity_for_company(doc.company)
+
+	# Swapped at the source, so transfer_legs still applies every check it applies going
+	# forward — same warehouse both ends, missing unit, non-positive quantity.
+	lines = [
+		{
+			"item_code": row.item_code,
+			"qty": row.qty,
+			"uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
+			"from_warehouse": _intacct_warehouse(row.t_warehouse),
+			"to_warehouse": _intacct_warehouse(row.s_warehouse),
+		}
+		for row in doc.items
+	]
+	legs = rules.transfer_legs(lines)
+
+	function = build_transfer_xml(
+		# The ORIGINAL date, so the pair nets to zero in the period it happened in. If that
+		# period is closed Intacct rejects it — which is the right answer, not something to
+		# route around by quietly dating the reversal today.
+		transaction_date=doc.posting_date.strftime("%m/%d/%Y"),
+		reference_no=doc.name,
+		description=f"Reversal of Fuse {doc.name}",
+		legs=legs,
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"reversal": True,
+			"entity": entity,
+			"legs": legs,
+			"xml": ET.tostring(function, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[function],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		# A different purpose from the forward post, so the control ID differs and Intacct
+		# does not mistake the reversal for a replay of the original.
+		purpose="transfer-reverse",
+	)
+	return {"reversed": True, "intacct_keys": keys, "legs": len(legs)}
+
+
+@frappe.whitelist()
+def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
+	"""Undo a posted production run: finished goods back out, components back in.
+
+	Two documents again, atomically, and again they are NOT the forward pair negated —
+	see rules.manufacture_reversal_legs for why the cost changes sides.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+	if doc.purpose != "Manufacture":
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Manufacture.")
+
+	entity = gateway.entity_for_company(doc.company)
+	consumed, produced = _manufacture_rows(doc)
+
+	legs = rules.manufacture_reversal_legs(
+		consumed=consumed,
+		produced_item=produced["item_code"],
+		produced_qty=produced["qty"],
+		produced_uom=produced["uom"],
+		warehouse=_intacct_warehouse(produced["warehouse"]),
+	)
+	legs["unproduce"][0]["bin"] = _default_bin(produced["warehouse"], produced["item_code"])
+
+	unproduce_fn = build_ictransaction_xml(
+		definition=MANUFACTURING_UNPRODUCE,
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["unproduce"],
+		location_id=entity,
+	)
+	unconsume_fn = build_ictransaction_xml(
+		definition=MANUFACTURING_UNCONSUME,
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["unconsume"],
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"reversal": True,
+			"entity": entity,
+			"unproduce_xml": ET.tostring(unproduce_fn, encoding="unicode"),
+			"unconsume_xml": ET.tostring(unconsume_fn, encoding="unicode"),
+		}
+
+	# Finished goods out BEFORE components back in, mirroring the forward order. Atomic, so
+	# it cannot half-undo and leave the components duplicated.
+	keys = gateway.execute_many(
+		[unproduce_fn, unconsume_fn],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose="manufacture-reverse",
+		atomic=True,
+	)
+	return {"reversed": True, "intacct_keys": keys}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Document hooks
 # ──────────────────────────────────────────────────────────────────────────────
@@ -284,6 +424,13 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 POSTED_PURPOSES = {
 	"Manufacture": post_stock_entry_manufacture,
 	"Material Transfer": post_stock_entry_transfer,
+}
+
+# And how each one is undone. Keyed the same way, so a purpose that can be posted but not
+# reversed is visible as a gap here rather than discovered at a cancel.
+REVERSED_PURPOSES = {
+	"Manufacture": reverse_stock_entry_manufacture,
+	"Material Transfer": reverse_stock_entry_transfer,
 }
 
 
@@ -321,26 +468,44 @@ def on_stock_entry_submit(doc, method=None):
 
 
 def on_stock_entry_cancel(doc, method=None):
-	"""Refuse to cancel something already posted to Intacct.
+	"""Reverse the movement in Intacct as part of cancelling it.
 
-	Cancelling here would leave ERPNext saying the movement never happened while Intacct
-	still holds it — the two systems disagreeing, silently, about stock that physically
+	INTACCT REVERSES FIRST, for the same reason it posts first: if Intacct will not accept
+	the reversal — a closed period, a warehouse since deactivated — the ERPNext cancel must
+	not stand either, or the two systems end up disagreeing about stock that physically
 	moved.
 
-	Reversing it properly is not yet designed: Intacct's reversal definitions are
-	convert-only, so it means converting the original document rather than posting an
-	opposite. Until that is built and proven, refusing is the honest answer.
+	The reversal is a NEW pair of documents, not a deletion. Intacct keeps the original and
+	the undo, which is what an audit trail is for.
 	"""
-	if doc.purpose not in POSTED_PURPOSES:
+	handler = REVERSED_PURPOSES.get(doc.purpose)
+	if not handler:
 		return
 	if not doc.get("custom_intacct_key"):
+		# Never posted — nothing in Intacct to undo. Cancel freely.
 		return
 
-	frappe.throw(
-		f"{doc.name} has already been posted to Intacct (key {doc.custom_intacct_key}). "
-		"Cancelling it here would leave ERPNext and Intacct disagreeing about stock that "
-		"physically moved. Reverse it in Intacct first."
-	)
+	if doc.get("custom_intacct_reversal_key"):
+		frappe.throw(
+			f"{doc.name} has already been reversed in Intacct "
+			f"(key {doc.custom_intacct_reversal_key}). Reversing it twice would put the "
+			"stock back a second time."
+		)
+
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.post_movements:
+		# Posting is off but this document carries an Intacct key, so it was posted while
+		# it was on. Cancelling now would strand that posting with nothing to undo it.
+		frappe.throw(
+			f"{doc.name} was posted to Intacct (key {doc.custom_intacct_key}) but posting "
+			"is now switched off, so it cannot be reversed. Turn Post Stock Movements back "
+			"on to cancel this, or reverse it in Intacct by hand."
+		)
+
+	result = handler(doc.name)
+
+	doc.db_set("custom_intacct_reversal_key", ", ".join(str(key) for key in result.get("intacct_keys") or [] if key))
+	doc.db_set("custom_intacct_reversed_on", frappe.utils.now_datetime())
 
 
 def _default_bin(warehouse, item_code):

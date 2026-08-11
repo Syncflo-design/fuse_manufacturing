@@ -407,3 +407,50 @@ transfer, stock adjustment, all correctly costed — without touching the live c
 Entity ID stored against each ERPNext Company, sent as `<locationid>` on every login.
 **Why:** Manufacturing transaction definitions are "Entity only"; a top-level session is
 rejected with BL01001973.
+
+## 2026-08-11 — A cancel reverses in Intacct; it does not refuse
+
+**Decision:** Cancelling a posted Stock Entry posts a reversing pair to Intacct first,
+then allows the cancel. It no longer throws. The reversal is a NEW pair of documents —
+Intacct keeps the original and the undo.
+
+**Why:** the previous refusal was based on the donor's claim that the reversal definitions
+are convert-only. `INVDOCUMENTPARAMS` on `leadertread-imp` says otherwise: both
+`Manufacturing Run Decrease` and `Manufacturing Backflush Incr` are active with
+CREATETYPE "New document or Convert". Refusing was the honest answer while that was
+unknown; it is not any more.
+
+**The trap — a reversal is NOT the forward pair negated.** The cost always rides the
+increase leg, so flipping direction moves it to the other side:
+
+| | Components | Finished goods |
+|---|---|---|
+| Forward | Backflush **Decr** — no cost | Run **Increase** — cost sent |
+| Reverse | Backflush **Incr** — **cost required** | Run **Decrease** — no cost |
+
+Building the reversal by mirroring the forward legs returns the quantities and loses the
+money. `rules.manufacture_reversal_legs` returns components at the exact rate they were
+consumed at, read from the same rows the forward post used.
+
+**Consequences:**
+- **A zero component cost is refused, not sent.** `Backflush Incr` has UPDATES_COST=true,
+  so a zero would overwrite Intacct's valuation of that item — destructive, not merely
+  wrong.
+- **The finished-goods leg carries no cost**, so Intacct removes it at its own current
+  valuation. If that item has been produced again since at a different cost, the reversal
+  will not net to zero in value. That is Intacct's own behaviour and correct: we do not
+  know what it has cost since, and inventing a number to force a clean net would be
+  exactly the guessing the golden-source principle forbids.
+- **The reversal is dated the ORIGINAL posting date**, so the pair nets to zero in the
+  period it happened in. A closed period rejects it — the right answer, not something to
+  route around by quietly dating the reversal today.
+- Control ID carries purpose `-reverse`, so it is deterministic (a retried reversal cannot
+  post twice) but distinct from the forward post (Intacct will not mistake it for a replay).
+- `custom_intacct_reversal_key` blocks a second reversal; posting switched off blocks the
+  cancel entirely rather than stranding a posting with nothing to undo it.
+
+## 2026-08-11 — Intacct documents say "Fuse", not "ERPNext"
+
+**Decision:** the DESCRIPTION on posted documents reads `Fuse <name>`. Internal messages
+that describe ERPNext's own behaviour keep saying ERPNext, because that is what they mean.
+**Why:** the client bought Fuse. The platform it runs on is not their concern.

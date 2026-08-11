@@ -272,6 +272,71 @@ def manufacture_legs(consumed, produced_item, produced_qty, produced_uom, wareho
 	}
 
 
+def manufacture_reversal_legs(consumed, produced_item, produced_qty, produced_uom, warehouse):
+	"""The two legs that undo a production run.
+
+	NOT the forward legs negated. The cost moves to the OTHER leg, because the pairs are
+	asymmetric in Intacct:
+
+	  forward   Backflush Decr  components out, no cost   Run Increase  goods in, WITH cost
+	  reversal  Run Decrease    goods out, no cost        Backflush Incr components in, WITH cost
+
+	So putting components back means telling Intacct what each one costs, and it must be
+	the rate they were consumed at. Get that wrong and the reversal leaves a valuation
+	residue behind — the quantity returns, the money does not.
+
+	`consumed` is dicts of item_code, qty, uom, warehouse, rate, bin — the same rows the
+	forward post used, read before the cancel rewrites them.
+
+	Quantities are POSITIVE on both legs, as always: each definition applies its own sign.
+	"""
+	if not consumed:
+		raise ValueError("a production run must consume something, so its reversal must return something")
+	produced_qty = float(produced_qty or 0)
+	if produced_qty <= 0:
+		raise ValueError(f"produced quantity must be positive, got {produced_qty}")
+	if not produced_uom:
+		raise ValueError("produced unit is required and must match the item's UOM exactly")
+
+	for line in consumed:
+		if float(line.get("qty") or 0) <= 0:
+			raise ValueError(f"{line.get('item_code')}: consumed quantity must be positive")
+		if not line.get("uom"):
+			raise ValueError(f"{line.get('item_code')}: unit is required")
+		# A zero cost here is not merely wrong, it is destructive: the increase definition
+		# has UPDATES_COST=true, so Intacct would take the zero and overwrite the item's
+		# real valuation with it. Refuse rather than send it.
+		if float(line.get("rate") or 0) <= 0:
+			raise ValueError(
+				f"{line.get('item_code')}: no cost to return it at. Sending zero on a "
+				"cost-updating definition would overwrite Intacct's valuation."
+			)
+
+	return {
+		"unproduce": [
+			{
+				"item_id": produced_item,
+				"warehouse_id": warehouse,
+				"quantity": produced_qty,
+				"unit": produced_uom,
+				# No cost. Intacct removes it at its own current valuation, which is the
+				# honest answer — we do not know what it has cost since.
+			}
+		],
+		"unconsume": [
+			{
+				"item_id": line["item_code"],
+				"warehouse_id": line["warehouse"],
+				"quantity": float(line["qty"]),
+				"unit": line["uom"],
+				"cost": float(line["rate"]),
+				"bin": line.get("bin"),
+			}
+			for line in consumed
+		],
+	}
+
+
 def kit_build_order(kit_codes, recipes):
 	"""Order kits so every kit is built after the kits it consumes.
 
