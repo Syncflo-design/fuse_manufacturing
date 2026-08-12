@@ -636,6 +636,43 @@ def on_stock_entry_submit(doc, method=None):
 	doc.db_set("custom_intacct_posted_on", frappe.utils.now_datetime())
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Goods receipt — blocked
+# ──────────────────────────────────────────────────────────────────────────────
+
+_RECEIPT_REFUSAL = (
+	"Goods are received in Intacct, not in Fuse.\n\n"
+	"Purchase orders are mirrored here read-only so that stock on order shows in "
+	"projections and demand reporting. Receipting them here would add stock Intacct never "
+	"saw, and receipting the same delivery in Intacct would then count it twice."
+)
+
+
+def block_goods_receipt(doc, method=None):
+	"""Refuse any document that receives purchased goods into ERPNext.
+
+	A blanket block, not a check against mirrored orders only. A submitted Purchase Order
+	offers "Create → Purchase Receipt" one click away, and nothing about that button warns
+	that receiving belongs to Intacct.
+
+	If receipting ever moves to ERPNext — the handover model allows for it — this comes out
+	deliberately, together with the posting that would send the receipt to Intacct. A hole
+	left open now would be found by a user, not by us.
+	"""
+	frappe.throw(_RECEIPT_REFUSAL, title="Receipting happens in Intacct")
+
+
+def block_stock_updating_invoice(doc, method=None):
+	"""The same block by the other door.
+
+	A Purchase Invoice with "Update Stock" ticked receives goods without a Purchase
+	Receipt ever existing — the same divergence, reached by a checkbox rather than a
+	button. The invoice itself is not blocked, only its ability to move stock.
+	"""
+	if doc.get("update_stock"):
+		frappe.throw(_RECEIPT_REFUSAL, title="Receipting happens in Intacct")
+
+
 def on_stock_entry_cancel(doc, method=None):
 	"""Reverse the movement in Intacct as part of cancelling it.
 

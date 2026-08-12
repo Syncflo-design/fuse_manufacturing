@@ -8,6 +8,7 @@ precision alignment, cost fallback, drift tolerance, unit conversions and kit bu
 order. Keeping them out of masters.py is what makes them testable at all.
 """
 
+import datetime
 import hashlib
 import xml.etree.ElementTree as ET
 
@@ -327,6 +328,47 @@ def manufacture_legs(consumed, produced_item, produced_qty, produced_uom, wareho
 			}
 		],
 	}
+
+
+def intacct_date(value):
+	"""Intacct's MM/DD/YYYY to an ISO date.
+
+	Intacct returns US order regardless of the company's locale — this client is South
+	African and reads 08/07/2026 as 7 August, while Intacct means 8 July. Parsing it the
+	local way shifts a purchase order's due date by a month without failing, which is the
+	worst kind of wrong: reporting still looks plausible.
+
+	Returns None on anything unparseable rather than a guess, so a caller reports the order
+	instead of inventing a date nobody chose.
+	"""
+	value = (value or "").strip()
+	if not value:
+		return None
+	try:
+		return datetime.datetime.strptime(value, "%m/%d/%Y").date().isoformat()
+	except ValueError:
+		return None
+
+
+def purchase_order_signature(lines):
+	"""What a mirrored order currently says, for deciding whether it changed at all.
+
+	Rebuilding an unchanged order every sync would cancel and recreate documents daily,
+	and every rebuild takes Bin.ordered_qty off and puts it back — churn that makes the
+	stock-on-order figure flicker for no reason.
+
+	Order independent: Intacct may return the same lines in a different sequence, and that
+	is not a change.
+	"""
+	return sorted(
+		(
+			line["item_code"],
+			round(float(line["qty"]), 6),
+			line["warehouse"],
+			str(line["schedule_date"]),
+		)
+		for line in lines
+	)
 
 
 def adjustment_legs(lines, increase):

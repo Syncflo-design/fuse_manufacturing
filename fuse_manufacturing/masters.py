@@ -544,6 +544,276 @@ def sync_uoms():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Open purchase orders → ERPNext Purchase Orders (stock on order)
+# ──────────────────────────────────────────────────────────────────────────────
+
+PO_LINE_FIELDS = [
+	"DOCHDRID", "DOCPARID", "LINE_NO", "ITEMID", "UNIT", "QTY_REMAINING",
+	"WAREHOUSE.LOCATION_NO", "VENDORID", "PRICE",
+]
+PO_HEADER_FIELDS = ["DOCID", "WHENDUE", "CURRENCY", "STATE"]
+
+
+def _order_templates(company=None):
+	"""Intacct document templates that are purchase ORDERS, read from Intacct.
+
+	Not a hardcoded "Inventory purchase order": the name differs per client, and both the
+	inventory and non-inventory templates report UPDATES_INV = No, so that field cannot
+	separate them either. DOCCLASS = Order is what makes a template an order rather than a
+	requisition, receipt or invoice; whether a LINE matters for stock is then decided by
+	the item, which is the honest test.
+	"""
+	rows = gateway.query("PODOCUMENTPARAMS", ["DOCID", "DOCCLASS", "STATUS"], company=company)
+	return {
+		val(row, "DOCID")
+		for row in rows
+		if (val(row, "DOCCLASS") or "").strip().lower() == "order"
+		and (val(row, "STATUS") or "").strip().lower() == "active"
+	}
+
+
+def sync_purchase_orders(company=None):
+	"""Intacct open purchase orders → ERPNext Purchase Orders.
+
+	The point is stock ON ORDER: a submitted Purchase Order is the only thing that fills
+	Bin.ordered_qty, which is what Stock Projected Qty and demand reporting read. Nothing
+	is ever received here — receipting belongs to Intacct and is blocked outright.
+
+	Quantity is QTY_REMAINING, so an order partly received in Intacct shows only what is
+	still coming. When nothing is outstanding the ERPNext order is CLOSED, which drops it
+	out of ordered_qty while keeping the document.
+	"""
+	templates = _order_templates(company)
+	if not templates:
+		return {"skipped": "no active order templates in Intacct"}
+
+	rows = gateway.query(
+		"PODOCUMENTENTRY",
+		PO_LINE_FIELDS,
+		filter_xml="<greaterthan><field>QTY_REMAINING</field><value>0</value></greaterthan>",
+		company=company,
+	)
+
+	target = frappe.defaults.get_user_default("Company") or _target_companies(company)[0]
+
+	orders, problems = {}, []
+	for row in rows:
+		if val(row, "DOCPARID") not in templates:
+			continue
+
+		item_code = val(row, "ITEMID")
+		warehouse_id = val(row, "WAREHOUSE.LOCATION_NO")
+
+		# The item decides whether a line is stock at all. A non-inventory order buys
+		# services and expenses; those items are not stock items here, and an order line
+		# without a warehouse has nowhere to arrive.
+		if not frappe.db.get_value("Item", item_code, "is_stock_item"):
+			continue
+		if not warehouse_id:
+			continue
+
+		warehouse = frappe.db.get_value(
+			"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": target}, "name"
+		)
+		if not warehouse:
+			problems.append(f"{val(row, 'DOCHDRID')}: warehouse {warehouse_id} is not in ERPNext")
+			continue
+
+		orders.setdefault(val(row, "DOCHDRID"), {"vendor": val(row, "VENDORID"), "lines": []})
+		orders[val(row, "DOCHDRID")]["lines"].append(
+			{
+				"item_code": item_code,
+				"qty": float(val(row, "QTY_REMAINING") or 0),
+				# From the Item, not the order line — the same rule the postings follow.
+				"uom": frappe.db.get_value("Item", item_code, "stock_uom"),
+				"warehouse": warehouse,
+				"rate": float(val(row, "PRICE") or 0),
+				"schedule_date": None,  # filled from the header below
+			}
+		)
+
+	headers = {}
+	if orders:
+		for row in gateway.query("PODOCUMENT", PO_HEADER_FIELDS, company=company):
+			if val(row, "DOCID") in orders:
+				headers[val(row, "DOCID")] = row
+
+	created = updated = closed = unchanged = 0
+
+	for doc_id, order in orders.items():
+		header = headers.get(doc_id)
+		due = rules.intacct_date(val(header, "WHENDUE")) if header else None
+		if not due:
+			problems.append(f"{doc_id}: no due date on the Intacct order, skipped")
+			continue
+		for line in order["lines"]:
+			line["schedule_date"] = due
+
+		supplier = frappe.db.get_value("Supplier", {"custom_intacct_vendor_id": order["vendor"]}, "name")
+		if not supplier:
+			problems.append(f"{doc_id}: supplier {order['vendor']} is not in ERPNext — run the suppliers sync")
+			continue
+
+		existing = frappe.db.get_value("Purchase Order", {"custom_intacct_po_id": doc_id, "docstatus": 1}, "name")
+		if existing:
+			current = frappe.get_doc("Purchase Order", existing)
+			live = [
+				{
+					"item_code": row.item_code,
+					"qty": row.qty,
+					"warehouse": row.warehouse,
+					"schedule_date": str(row.schedule_date),
+				}
+				for row in current.items
+			]
+			if rules.purchase_order_signature(live) == rules.purchase_order_signature(
+				[dict(line, schedule_date=str(line["schedule_date"])) for line in order["lines"]]
+			):
+				unchanged += 1
+				continue
+
+			# Quantities moved. There is no receipt history here to preserve — nothing is
+			# ever received in ERPNext — so cancelling and rebuilding is simpler and always
+			# correct, where editing a submitted order in place is neither.
+			current.cancel()
+			updated += 1
+		else:
+			created += 1
+
+		po = frappe.new_doc("Purchase Order")
+		po.supplier = supplier
+		po.company = target
+		po.transaction_date = frappe.utils.nowdate()
+		po.schedule_date = due
+		po.custom_intacct_po_id = doc_id
+		po.custom_intacct_synced_on = frappe.utils.now_datetime()
+
+		currency = val(header, "CURRENCY")
+		if currency and frappe.db.exists("Currency", currency):
+			po.currency = currency
+
+		for line in order["lines"]:
+			po.append("items", line)
+
+		po.flags.ignore_permissions = True
+		po.insert(ignore_permissions=True)
+		po.submit()
+
+	# Orders mirrored earlier that Intacct no longer reports as outstanding have been
+	# received there. Closed, not cancelled: the order did happen, and closing is what
+	# takes it out of ordered_qty.
+	for name, doc_id in frappe.get_all(
+		"Purchase Order",
+		filters={"custom_intacct_po_id": ("is", "set"), "docstatus": 1, "status": ("not in", ("Closed",))},
+		fields=["name", "custom_intacct_po_id"],
+		as_list=True,
+	):
+		if doc_id not in orders:
+			frappe.get_doc("Purchase Order", name).update_status("Closed")
+			closed += 1
+
+	return {
+		"open_orders": len(orders),
+		"created": created,
+		"rebuilt": updated,
+		"unchanged": unchanged,
+		"closed": closed,
+		"problems": problems,
+	}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Vendors → Suppliers
+# ──────────────────────────────────────────────────────────────────────────────
+
+VENDOR_FIELDS = [
+	"RECORDNO", "VENDORID", "NAME", "STATUS", "CURRENCY", "TERMNAME", "VENDTYPE", "ONETIME",
+]
+
+# Where suppliers land when Intacct gives no vendor type. ERPNext makes supplier_group
+# mandatory, so something has to be chosen — this is the one place a name is invented, and
+# only for suppliers Intacct itself has not classified.
+UNCLASSIFIED_SUPPLIER_GROUP = "Intacct — Unclassified"
+
+
+def _supplier_group(vendor_type):
+	"""Mirror Intacct's vendor type as an ERPNext Supplier Group, creating it if new.
+
+	Vendor type is Intacct's own classification, so it is the honest source for the group
+	rather than filing every supplier under one default of our choosing.
+	"""
+	name = (vendor_type or "").strip() or UNCLASSIFIED_SUPPLIER_GROUP
+
+	if not frappe.db.exists("Supplier Group", name):
+		frappe.get_doc(
+			{
+				"doctype": "Supplier Group",
+				"supplier_group_name": name,
+				# Supplier Group is a tree; a new node without a parent becomes a second
+				# root, which ERPNext rejects.
+				"parent_supplier_group": _root_supplier_group(),
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	return name
+
+
+def _root_supplier_group():
+	root = frappe.db.get_value("Supplier Group", {"is_group": 1, "parent_supplier_group": ("in", ("", None))}, "name")
+	if not root:
+		frappe.throw("No root Supplier Group exists on this site — ERPNext setup is incomplete.")
+	return root
+
+
+def sync_suppliers(company=None):
+	"""Intacct VENDOR → ERPNext Supplier.
+
+	Needed before purchase orders can be mirrored: an ERPNext Purchase Order requires a
+	Supplier, and PO lines identify one only by VENDORID.
+
+	Read-only mirror, like every other master. Suppliers are disabled rather than deleted
+	when Intacct retires them — a supplier with purchase history cannot be removed, and the
+	history does not stop being true.
+	"""
+	rows = gateway.query("VENDOR", VENDOR_FIELDS, company=company)
+
+	created = updated = 0
+	for row in rows:
+		vendor_id = val(row, "VENDORID")
+		if not vendor_id:
+			continue
+
+		existing = frappe.db.get_value("Supplier", {"custom_intacct_vendor_id": vendor_id}, "name")
+		if existing:
+			doc = frappe.get_doc("Supplier", existing)
+			updated += 1
+		else:
+			doc = frappe.new_doc("Supplier")
+			created += 1
+
+		doc.supplier_name = val(row, "NAME") or vendor_id
+		doc.custom_intacct_vendor_id = vendor_id
+		doc.custom_intacct_recordno = val(row, "RECORDNO")
+		doc.supplier_group = _supplier_group(val(row, "VENDTYPE"))
+		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
+
+		# Only where the currency exists on the site. Intacct may name one ERPNext has not
+		# been given, and an unknown link fails the whole save for a field nothing depends
+		# on yet.
+		currency = val(row, "CURRENCY")
+		if currency and frappe.db.exists("Currency", currency):
+			doc.default_currency = currency
+
+		if doc.is_new() or _has_changes(doc):
+			doc.save(ignore_permissions=True)
+		elif existing:
+			updated -= 1
+
+	return {"read": len(rows), "created": created, "updated": updated}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Product lines → Item Groups
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1448,6 +1718,11 @@ def sync_all(company=None):
 		"items": sync_items(),
 		"bins": sync_bins(company=company),
 		"kits": sync_kits(company=company),
+		# Independent of the stock masters, but before purchase orders can be mirrored:
+		# a Purchase Order needs a Supplier, and PO lines name one only by VENDORID.
+		"suppliers": sync_suppliers(company=company),
+		# After suppliers, items and warehouses — an order line needs all three to land.
+		"purchase_orders": sync_purchase_orders(company=company),
 		# Last, because it decides what to keep by what Intacct actually sent.
 		"removed_defaults": remove_erpnext_defaults(company=company),
 	}
@@ -1491,6 +1766,8 @@ JOBS = {
 	"definitions": "list_transaction_definitions",
 	"map_entities": "map_entities",
 	"item_groups": "sync_item_groups",
+	"suppliers": "sync_suppliers",
+	"purchase_orders": "sync_purchase_orders",
 	"warehouses": "sync_warehouses",
 	"uoms": "sync_uoms",
 	"items": "sync_items",

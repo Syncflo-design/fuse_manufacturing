@@ -383,17 +383,24 @@ def read(object_name, fields=None, filters=None, page_size=50, company=None):
 	if isinstance(fields, str):
 		fields = frappe.parse_json(fields) if fields.strip().startswith("[") else [fields]
 
+	limit = min(int(page_size or 50), 200)
 	rows = query(
 		object_name,
 		fields or ["RECORDNO"],
 		filter_xml=filters or None,
-		# Capped low on purpose: this is for looking, not for pulling a master across.
-		page_size=min(int(page_size or 50), 200),
+		page_size=limit,
 		company=company,
 	)
+	# query() pages until the object is exhausted — page_size sets the page, not a limit.
+	# Reading VENDOR unfiltered that way timed out twice before this was truncated here.
+	# The count reported is the REAL total, so a truncated answer never looks complete.
+	total = len(rows)
+	rows = rows[:limit]
 	return {
 		"object": object_name,
-		"count": len(rows),
+		"count": total,
+		"returned": len(rows),
+		"truncated": total > len(rows),
 		# Elements out of query(), flattened to plain values so the result is readable.
 		"rows": [{child.tag: (child.text or "").strip() for child in row} for row in rows],
 	}

@@ -26,6 +26,22 @@ doc_events = {
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
 	},
+	# Goods are received in Intacct. Purchase orders are mirrored here read-only so stock
+	# on order reaches projections and demand reporting — receipting them here would add
+	# stock Intacct never saw, and receipting the same delivery in Intacct would then count
+	# it twice. Blocked at validate, so it fails before anything is written.
+	"Purchase Receipt": {
+		"validate": "fuse_manufacturing.postings.block_goods_receipt",
+	},
+	"Subcontracting Receipt": {
+		"validate": "fuse_manufacturing.postings.block_goods_receipt",
+	},
+	# Same divergence by the other door: a Purchase Invoice with "Update Stock" ticked
+	# receives goods without a Purchase Receipt ever existing. The invoice is allowed; only
+	# its ability to move stock is not.
+	"Purchase Invoice": {
+		"validate": "fuse_manufacturing.postings.block_stock_updating_invoice",
+	},
 }
 
 scheduler_events = {

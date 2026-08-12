@@ -153,6 +153,45 @@ CUSTOM_FIELDS = {
 			"allow_on_submit": 1,
 		},
 	],
+	"Purchase Order": [
+		{
+			"fieldname": "custom_intacct_po_id",
+			"fieldtype": "Data",
+			"label": "Intacct PO",
+			"insert_after": "supplier",
+			"read_only": 1,
+			"unique": 1,
+			"allow_on_submit": 1,
+			"description": "DOCID of the Intacct purchase order this mirrors. These orders are read-only — they exist so stock on order reaches projections and demand reporting. Receipting happens in Intacct.",
+		},
+		{
+			"fieldname": "custom_intacct_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Synced from Intacct",
+			"insert_after": "custom_intacct_po_id",
+			"read_only": 1,
+			"allow_on_submit": 1,
+		},
+	],
+	"Supplier": [
+		{
+			"fieldname": "custom_intacct_vendor_id",
+			"fieldtype": "Data",
+			"label": "Intacct Vendor ID",
+			"insert_after": "supplier_name",
+			"read_only": 1,
+			"unique": 1,
+			"description": "VENDORID. Purchase order lines carry the supplier as this code, so it is the join back to Intacct — the name is not unique and changes.",
+		},
+		{
+			"fieldname": "custom_intacct_recordno",
+			"fieldtype": "Data",
+			"label": "Intacct Record No",
+			"insert_after": "custom_intacct_vendor_id",
+			"read_only": 1,
+			"hidden": 1,
+		},
+	],
 	"Item Group": [
 		{
 			"fieldname": "custom_intacct_product_line",
