@@ -50,6 +50,7 @@ doc_events = {
 scheduler_events = {
 	"hourly_long": [
 		"fuse_manufacturing.masters.scheduled_item_sync",
+		"fuse_manufacturing.masters.scheduled_order_sync",
 	],
 	"daily_long": [
 		"fuse_manufacturing.masters.scheduled_config_sync",

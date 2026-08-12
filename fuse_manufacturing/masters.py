@@ -549,7 +549,7 @@ PO_LINE_FIELDS = [
 	"DOCHDRID", "DOCPARID", "LINE_NO", "ITEMID", "UNIT", "QTY_REMAINING",
 	"WAREHOUSE.LOCATION_NO", "VENDORID", "PRICE",
 ]
-PO_HEADER_FIELDS = ["DOCID", "WHENDUE", "CURRENCY", "STATE"]
+PO_HEADER_FIELDS = ["DOCID", "WHENCREATED", "WHENDUE", "CURRENCY", "STATE"]
 
 
 def _order_templates(company=None):
@@ -681,7 +681,12 @@ def sync_purchase_orders(company=None):
 		po = frappe.new_doc("Purchase Order")
 		po.supplier = supplier
 		po.company = target
-		po.transaction_date = frappe.utils.nowdate()
+		# The date Intacct raised the order, NOT today. Dating a mirrored order today puts
+		# it after its own due date whenever the due date has passed, and ERPNext refuses
+		# that with "Required By cannot be before Date". It is also simply wrong — the
+		# order was placed when it was placed.
+		raised = rules.intacct_date(val(header, "WHENCREATED")) or due
+		po.transaction_date = min(raised, due)
 		po.schedule_date = due
 		po.custom_intacct_po_id = doc_id
 		po.custom_intacct_synced_on = frappe.utils.now_datetime()
@@ -1903,6 +1908,28 @@ def scheduled_item_sync():
 	if not _enabled():
 		return
 	return run_sync("items_incremental")
+
+
+def scheduled_order_sync():
+	"""Hourly. Suppliers first, then open purchase orders.
+
+	Stock on order goes stale continuously — Intacct receives against these orders through
+	the day and the outstanding quantity falls with each receipt. An hour behind is
+	immaterial for planning, and the work is small: only lines with quantity remaining are
+	read, and an order that has not changed is left alone.
+
+	Suppliers go first in the SAME job because a purchase order needs one. A supplier added
+	in Intacct this morning would otherwise block its own order until someone noticed.
+
+	Through run_sync so it takes the same lock as every other sync — two jobs opening
+	competing Intacct sessions is the thing the lock exists to prevent.
+	"""
+	if not _enabled():
+		return
+	return {
+		"suppliers": run_sync("suppliers"),
+		"purchase_orders": run_sync("purchase_orders"),
+	}
 
 
 def _sync_items_incremental(company=None):
