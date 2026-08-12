@@ -251,6 +251,10 @@ ROLE_PERMISSIONS = {
 	"BOM": _READ_ONLY,
 	"Item Alternative": _READ_ONLY,
 	"Intacct Bin": _READ_ONLY,
+	# Mirrored from Intacct so stock on order reaches the reports. Read only on purpose:
+	# these are not orders anyone raises or receives here.
+	"Purchase Order": _READ_ONLY,
+	"Supplier": _READ_ONLY,
 	# READ ONLY DELIBERATELY. Stock Reconciliation does not post to Intacct — it is what
 	# the opening stock sync uses. Create rights here would hand this role a way to change
 	# stock that Intacct never sees, which is the one thing the whole app prevents.
@@ -259,7 +263,11 @@ ROLE_PERMISSIONS = {
 
 # Query reports carry their own role list, separate from DocType permissions. These are the
 # three on the Stock Control workspace.
-ROLE_REPORTS = ("Stock Balance", "Stock Ledger", "Stock Projected Qty")
+ROLE_REPORTS = (
+	"Stock Balance", "Stock Ledger", "Stock Projected Qty",
+	# Line level view of what is still on order and when it is due.
+	"Purchase Order Analysis",
+)
 
 
 def _apply_role_permissions():
