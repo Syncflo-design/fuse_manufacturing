@@ -181,6 +181,72 @@ CUSTOM_FIELDS = {
 # in step. Warehouse and Intacct Bin stay read-only for it — Intacct owns those.
 ROLE = "Stock Controller"
 
+# What the role can actually do. Creating the Role alone left it carrying almost nothing,
+# so a user holding ONLY this role saw an empty workspace — it happened to work for people
+# who also held Stock User or Manufacturing User, which hid the gap.
+#
+# Set here rather than clicked into the Role Permissions Manager, because a new client has
+# to arrive configured. Live here rather than in the theme app: which documents a role may
+# raise is integration behaviour, not look and feel.
+_FULL = {
+	"read": 1, "write": 1, "create": 1, "delete": 0,
+	"submit": 1, "cancel": 1, "amend": 1,
+	"print": 1, "email": 1, "report": 1, "export": 1, "share": 1,
+}
+_READ_ONLY = {
+	"read": 1, "write": 0, "create": 0, "delete": 0,
+	"submit": 0, "cancel": 0, "amend": 0,
+	"print": 1, "email": 1, "report": 1, "export": 1, "share": 0,
+}
+
+ROLE_PERMISSIONS = {
+	# The documents this role exists to raise. delete stays 0 deliberately — a posted
+	# movement is REVERSED, never deleted, or Intacct keeps a document ERPNext has
+	# forgotten.
+	"Stock Entry": _FULL,
+	"Work Order": _FULL,
+	# Intacct owns these. Read is needed to raise the documents above; write is not, and an
+	# edit would be overwritten by the next masters sync anyway.
+	"Item": _READ_ONLY,
+	"Warehouse": _READ_ONLY,
+	"BOM": _READ_ONLY,
+	"Item Alternative": _READ_ONLY,
+	"Intacct Bin": _READ_ONLY,
+	# READ ONLY DELIBERATELY. Stock Reconciliation does not post to Intacct — it is what
+	# the opening stock sync uses. Create rights here would hand this role a way to change
+	# stock that Intacct never sees, which is the one thing the whole app prevents.
+	"Stock Reconciliation": _READ_ONLY,
+}
+
+# Query reports carry their own role list, separate from DocType permissions. These are the
+# three on the Stock Control workspace.
+ROLE_REPORTS = ("Stock Balance", "Stock Ledger", "Stock Projected Qty")
+
+
+def _apply_role_permissions():
+	"""Grant the role what it needs, and only read where Intacct owns the data."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	for doctype, perms in ROLE_PERMISSIONS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		add_permission(doctype, ROLE, 0)
+		for ptype, value in perms.items():
+			update_permission_property(doctype, ROLE, 0, ptype, value, validate=False)
+
+	granted = []
+	for report in ROLE_REPORTS:
+		if not frappe.db.exists("Report", report):
+			continue
+		doc = frappe.get_doc("Report", report)
+		if any(row.role == ROLE for row in doc.roles):
+			continue
+		doc.append("roles", {"role": ROLE})
+		doc.save(ignore_permissions=True)
+		granted.append(report)
+
+	return granted
+
 
 def after_install():
 	"""Put the site's Fuse-owned configuration in step with this version of the app.
@@ -201,6 +267,7 @@ def after_install():
 			{"doctype": "Role", "role_name": ROLE, "desk_access": 1, "is_custom": 1}
 		).insert(ignore_permissions=True)
 
+	reports = _apply_role_permissions()
 	frappe.db.commit()
 
 	return {
@@ -208,4 +275,6 @@ def after_install():
 		"doctypes": sorted(CUSTOM_FIELDS),
 		"created_or_updated": created,
 		"role": ROLE,
+		"role_permissions": sorted(ROLE_PERMISSIONS),
+		"reports_granted": reports,
 	}
