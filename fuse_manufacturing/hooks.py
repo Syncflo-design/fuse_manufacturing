@@ -23,6 +23,9 @@ after_migrate = "fuse_manufacturing.install.after_install"
 # Intacct Settings — a site syncs masters long before it is ready to post.
 doc_events = {
 	"Stock Entry": {
+		# Material Receipt and Material Issue are refused: Fuse posts movements, not
+		# general adjustments. On-hand corrections go through Intacct's Cycle Count.
+		"validate": "fuse_manufacturing.postings.block_stock_adjustment",
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
 	},

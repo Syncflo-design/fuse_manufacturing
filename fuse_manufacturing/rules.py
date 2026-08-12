@@ -371,52 +371,6 @@ def purchase_order_signature(lines):
 	)
 
 
-def adjustment_legs(lines, increase):
-	"""Lines for a stock adjustment, in or out.
-
-	The same asymmetry as everywhere else: the INCREASE definition values the movement
-	(UPDATES_COST=true) so it carries a cost, and the decrease does not — Intacct removes
-	stock at its own valuation, which is the only honest answer since it holds the money.
-
-	`lines` are dicts of item_code, qty, uom, warehouse, rate, bin. Quantities POSITIVE on
-	both; the definition applies the sign.
-	"""
-	if not lines:
-		raise ValueError("an adjustment must have at least one line")
-
-	legs = []
-	for line in lines:
-		qty = float(line.get("qty") or 0)
-		if qty <= 0:
-			raise ValueError(f"{line.get('item_code')}: quantity must be positive, got {qty}")
-		if not line.get("uom"):
-			raise ValueError(f"{line.get('item_code')}: unit is required and must match the item's UOM exactly")
-		if not line.get("warehouse"):
-			raise ValueError(f"{line.get('item_code')}: warehouse is required")
-
-		leg = {
-			"item_id": line["item_code"],
-			"warehouse_id": line["warehouse"],
-			"quantity": qty,
-			"unit": line["uom"],
-			"bin": line.get("bin"),
-		}
-
-		if increase:
-			# Same trap as the reversal: a zero on a cost-updating definition does not mean
-			# "no opinion", it means "this item is now worth nothing".
-			rate = float(line.get("rate") or 0)
-			if rate <= 0:
-				raise ValueError(
-					f"{line.get('item_code')}: no cost to bring it in at. Sending zero on a "
-					"cost-updating definition would overwrite Intacct's valuation."
-				)
-			leg["cost"] = rate
-
-		legs.append(leg)
-	return legs
-
-
 def classify_manufacture_rows(rows):
 	"""Split a Manufacture entry's rows into what was consumed and what was produced.
 

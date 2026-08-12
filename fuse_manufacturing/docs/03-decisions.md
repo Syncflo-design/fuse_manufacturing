@@ -507,3 +507,38 @@ document number as it does for reversals.
   only.
 - Adjustments carry bins, because they go through `create_ictransaction` — so unlike
   transfers, they already work for the 32 bin-tracked items.
+
+## 2026-08-12 — General stock adjustment removed; corrections go through Cycle Count
+
+**Decision:** Fuse does not post stock adjustments. Material Receipt and Material Issue are
+refused at validate, alongside goods receipting. On-hand corrections happen through
+Intacct's Cycle Count, which is raised in Intacct — Fuse's part will be running the
+counting process, and that is separate work.
+**Why:** authorised 2026-08-12. It also removes a dependency: the two `Stock Adjustment`
+definitions no longer need creating in Intacct, so the client request drops from four
+definitions to two.
+**Consequences:**
+- Nothing here posts an adjustment, so nothing here may make one. A Material Issue would
+  take stock out of ERPNext that Intacct still believes it has.
+- The Item Adjustment tile is gone, with its Add/Remove Stock choice.
+- `ICCYCLECOUNT` and `ICCYCLECOUNTENTRY` exist on the gateway and the LINES carry BINID,
+  LOTNO and SERIALNO — so when the counting process is built, bin-tracked items are not a
+  problem there. Whether the gateway will CREATE a cycle count is untested; the client
+  raises them in Intacct, so it may never need to.
+- A cycle count is absolute ("this is what is on the shelf"), not relative, so it maps to
+  Stock Reconciliation rather than to the Add/Remove model that was removed.
+
+## 2026-08-12 — Bin tracking is read from Intacct, never configured here
+
+**Decision:** no setting for bin tracking. `custom_intacct_bin_tracked` comes off the ITEM
+record on every items sync, and the postings send a bin only where the item carries one.
+**Why:** a toggle in Fuse could disagree with Intacct, which is exactly what the
+golden-source rule exists to prevent. It also means nothing needs deciding per client.
+**Consequences:**
+- Leadertread plans a data clean-up before go-live — no lot, no bin tracking. When that
+  lands, the next items sync clears the flags and ordinary ICTRANSFERs start working for
+  the 32 affected items. No code change and no deploy.
+- The two-legged transfer route (`Stock Transfer Increase`/`Decrease`) stays on the roadmap
+  for horizontal expansion — for a future client who genuinely wants bins — rather than
+  being built for a problem this client is about to remove.
+- Lot and serial are already sent when an item carries them; same rule, same source.

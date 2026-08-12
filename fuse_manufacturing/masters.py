@@ -137,8 +137,6 @@ def list_transaction_definitions(company=None):
 		postings.MANUFACTURING_PRODUCE,
 		postings.MANUFACTURING_UNCONSUME,
 		postings.MANUFACTURING_UNPRODUCE,
-		postings.ADJUSTMENT_INCREASE,
-		postings.ADJUSTMENT_DECREASE,
 	}
 	present = {d["docid"] for d in definitions}
 	missing = sorted(required - present)
