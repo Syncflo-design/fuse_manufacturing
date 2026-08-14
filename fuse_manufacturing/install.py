@@ -259,6 +259,14 @@ ROLE_PERMISSIONS = {
 	# the opening stock sync uses. Create rights here would hand this role a way to change
 	# stock that Intacct never sees, which is the one thing the whole app prevents.
 	"Stock Reconciliation": _READ_ONLY,
+	# Without these the role cannot open the Fuse Home page or any workspace at all — the
+	# desk answers with "does not have doctype access via role permission for document
+	# Page" and the sidebar renders empty. Frappe grants Page read only to System Manager
+	# and Workspace read only to Workspace Manager and Desk User, none of which a shop
+	# floor user has. Found live on 2026-08-12 and granted by hand; here so a rebuilt site
+	# does not lock the same user out again.
+	"Page": _READ_ONLY,
+	"Workspace": _READ_ONLY,
 }
 
 # Query reports carry their own role list, separate from DocType permissions. These are the
