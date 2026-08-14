@@ -273,8 +273,9 @@ ROLE_PERMISSIONS = {
 # three on the Stock Control workspace.
 ROLE_REPORTS = (
 	"Stock Balance", "Stock Ledger", "Stock Projected Qty",
-	# Line level view of what is still on order and when it is due.
-	"Purchase Order Analysis",
+	# Ours. Carries its own roles in the report definition, but granting here too means a
+	# site that had the role before the report arrived still ends up with access.
+	"Stock on Order",
 )
 
 
