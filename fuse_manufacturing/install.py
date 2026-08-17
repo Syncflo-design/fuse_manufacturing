@@ -267,6 +267,10 @@ ROLE_PERMISSIONS = {
 	# does not lock the same user out again.
 	"Page": _READ_ONLY,
 	"Workspace": _READ_ONLY,
+	# Read so the Training page can list the guides and the user can open them. Create as
+	# well, so a supervisor can upload a new version without an administrator — these are
+	# training documents, not stock.
+	"File": {**_READ_ONLY, "create": 1, "write": 1},
 }
 
 # Query reports carry their own role list, separate from DocType permissions. These are the
