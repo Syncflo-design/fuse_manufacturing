@@ -16,7 +16,7 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.0.1-2026-08-18';
+	var BUILD_MARKER = 'v0.3.0-2026-08-18';
 	console.log('Fuse Shop Floor loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-floor-stylesheet')) {
@@ -68,6 +68,44 @@ function ff_escape(value) {
 function ff_qty(value) {
 	var number = flt(value);
 	return String(parseFloat(number.toFixed(4)));
+}
+
+// Inline SVG, one stroke weight, one visual language (Lucide). Not emoji —
+// emoji render differently on every Android skin, cannot take a colour from the
+// stylesheet, and would be read aloud by a screen reader as their own name.
+//
+// Every icon here sits beside a text label, so none of them needs a label of its
+// own; they are marked aria-hidden and the text carries the meaning.
+var FF_ICONS = {
+	back: 'M19 12H5M12 19l-7-7 7-7',
+	scan: 'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10',
+	orders: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM8 11h8M8 15h5',
+	wip: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12',
+	transfer: 'M8 3L4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4',
+	tick: 'M20 6L9 17l-5-5',
+	remove: 'M18 6L6 18M6 6l12 12',
+	warn: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01'
+};
+
+function ff_icon(name) {
+	return (
+		'<svg class="ff-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+		'<path d="' + FF_ICONS[name] + '"></path></svg>'
+	);
+}
+
+// Recording a run is three moves — choose the order, say how much, confirm what
+// went in — and the middle one happens in a dialog. Without a marker the operator
+// has no idea whether the screen in front of them is the last one.
+function ff_step(current, total, label) {
+	return [
+		'<div class="ff-step">',
+		'  <span>Step ' + current + ' of ' + total + ' · ' + ff_escape(label) + '</span>',
+		'  <span class="ff-step-bar">',
+		'    <span class="ff-step-fill" style="width: ' + Math.round((current / total) * 100) + '%"></span>',
+		'  </span>',
+		'</div>'
+	].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -126,8 +164,9 @@ FuseFloor.prototype.reload_context = function () {
 FuseFloor.prototype.warning_html = function () {
 	if (!this.context || this.context.posting_on) return '';
 	return [
-		'<div class="ff-warn">',
-		'  Posting to Intacct is switched off. Nothing recorded here will reach the books.',
+		'<div class="ff-warn" role="alert">',
+		ff_icon('warn'),
+		'  <span>Posting to Intacct is switched off. Nothing recorded here will reach the books.</span>',
 		'</div>'
 	].join('\n');
 };
@@ -141,24 +180,27 @@ FuseFloor.prototype.render = function (html) {
 // Home
 // ---------------------------------------------------------------------------
 
+function ff_tile(go, icon, title, blurb) {
+	return [
+		'  <button class="ff-tile" data-go="' + go + '">',
+		'    <span class="ff-tile-mark">' + ff_icon(icon) + '</span>',
+		'    <span class="ff-tile-text">',
+		'      <span class="ff-tile-title">' + ff_escape(title) + '</span>',
+		'      <span class="ff-tile-sub">' + ff_escape(blurb) + '</span>',
+		'    </span>',
+		'  </button>'
+	].join('\n');
+}
+
 FuseFloor.prototype.home = function () {
 	var self = this;
 	this.basket = [];
 
 	this.render([
 		'<div class="ff-menu">',
-		'  <button class="ff-tile" data-go="run">',
-		'    <span class="ff-tile-title">Confirm a batch</span>',
-		'    <span class="ff-tile-sub">Record what you made against a works order</span>',
-		'  </button>',
-		'  <button class="ff-tile" data-go="wip">',
-		'    <span class="ff-tile-title">Issue to WIP</span>',
-		'    <span class="ff-tile-sub">Move components from a store onto the floor</span>',
-		'  </button>',
-		'  <button class="ff-tile" data-go="move">',
-		'    <span class="ff-tile-title">Move stock</span>',
-		'    <span class="ff-tile-sub">Warehouse to warehouse</span>',
-		'  </button>',
+		ff_tile('run', 'orders', 'Works Orders', 'Record what you made against a works order'),
+		ff_tile('wip', 'wip', 'Issue to WIP', 'Move components from a store onto the floor'),
+		ff_tile('move', 'transfer', 'Item Transfer', 'Warehouse to warehouse'),
 		'</div>'
 	].join('\n'));
 
@@ -173,7 +215,7 @@ FuseFloor.prototype.home = function () {
 FuseFloor.prototype.header_html = function (title, subtitle) {
 	return [
 		'<div class="ff-head">',
-		'  <button class="ff-back" data-back="1">&#8592;</button>',
+		'  <button class="ff-back" data-back="1" aria-label="Back">' + ff_icon('back') + '</button>',
 		'  <div class="ff-head-text">',
 		'    <div class="ff-title">' + ff_escape(title) + '</div>',
 		'    <div class="ff-sub">' + ff_escape(subtitle || '') + '</div>',
@@ -215,7 +257,7 @@ FuseFloor.prototype.transfer = function (purpose) {
 	}
 
 	this.render([
-		this.header_html(wip ? 'Issue to WIP' : 'Move stock',
+		this.header_html(wip ? 'Issue to WIP' : 'Item Transfer',
 			wip ? 'Components onto the floor' : 'Warehouse to warehouse'),
 		'<div class="ff-pair">',
 		'  <label class="ff-label">From',
@@ -226,12 +268,15 @@ FuseFloor.prototype.transfer = function (purpose) {
 		'  </label>',
 		'</div>',
 		'<div class="ff-scan">',
+		ff_icon('scan'),
 		'  <input class="ff-input" data-scan="1" placeholder="Scan or type an item" ',
 		'         autocomplete="off" autocapitalize="off" spellcheck="false">',
 		'</div>',
 		'<div class="ff-results" data-results="1"></div>',
 		'<div class="ff-basket" data-basket="1"></div>',
-		'<button class="ff-submit" data-submit="1" disabled>Record</button>'
+		'<div class="ff-actions">',
+		'  <button class="ff-submit" data-submit="1" disabled>Record</button>',
+		'</div>'
 	].join('\n'));
 
 	this.bind_back();
@@ -381,7 +426,8 @@ FuseFloor.prototype.paint_basket = function () {
 			'  <span class="ff-row-main">' + ff_escape(row.item_code) + '</span>' +
 			'  <span class="ff-row-sub">' + ff_escape(row.item_name || '') + '</span>' +
 			'  <span class="ff-row-qty">' + ff_qty(row.qty) + ' ' + ff_escape(row.stock_uom) + '</span>' +
-			'  <button class="ff-remove" data-remove="' + index + '">&#215;</button>' +
+			'  <button class="ff-remove" data-remove="' + index + '" aria-label="Remove ' +
+			ff_escape(row.item_code) + '">' + ff_icon('remove') + '</button>' +
 			'</div>'
 		);
 	});
@@ -439,7 +485,7 @@ FuseFloor.prototype.submit_transfer = function () {
 };
 
 // ---------------------------------------------------------------------------
-// Confirm a batch
+// Works Orders — recording production against one
 // ---------------------------------------------------------------------------
 
 FuseFloor.prototype.work_orders = function () {
@@ -453,8 +499,10 @@ FuseFloor.prototype.work_orders = function () {
 			var orders = (r && r.message) || [];
 
 			self.render([
-				self.header_html('Confirm a batch', 'Open works orders'),
+				self.header_html('Works Orders', 'Open orders'),
+				ff_step(1, 3, 'Choose the order'),
 				'<div class="ff-scan">',
+				ff_icon('scan'),
 				'  <input class="ff-input" data-scan="1" placeholder="Scan a works order, or filter" ',
 				'         autocomplete="off" autocapitalize="off" spellcheck="false">',
 				'</div>',
@@ -591,6 +639,7 @@ FuseFloor.prototype.check_components = function (wo, qty) {
 
 			var html = [
 				self.header_html('What went in?', wo.production_item + ' · ' + ff_qty(qty) + ' ' + wo.stock_uom),
+				ff_step(3, 3, 'Confirm what went in'),
 				'<div class="ff-note">',
 				'  These are the recipe quantities. Change any that differed — the finished cost',
 				'  is worked out from what actually went in.',
@@ -613,13 +662,17 @@ FuseFloor.prototype.check_components = function (wo, qty) {
 
 			if (produced) {
 				html.push(
-					'<div class="ff-made">Making <b>' + ff_qty(produced.qty) + ' ' +
+					'<div class="ff-made">' + ff_icon('wip') + '<span>Making <b>' + ff_qty(produced.qty) + ' ' +
 					ff_escape(produced.uom) + '</b> of ' + ff_escape(produced.item_code) +
-					' into ' + ff_escape(produced.t_warehouse || '') + '</div>'
+					' into ' + ff_escape(produced.t_warehouse || '') + '</span></div>'
 				);
 			}
 
-			html.push('<button class="ff-submit" data-submit="1">Record the run</button>');
+			html.push(
+				'<div class="ff-actions">' +
+				'  <button class="ff-submit" data-submit="1">Record the run</button>' +
+				'</div>'
+			);
 
 			self.render(html.join('\n'));
 			self.bind_back(function () {
@@ -663,15 +716,17 @@ FuseFloor.prototype.done = function (result, message) {
 
 	this.render([
 		'<div class="ff-done">',
-		'  <div class="ff-tick">&#10003;</div>',
+		'  <div class="ff-tick">' + ff_icon('tick') + '</div>',
 		'  <div class="ff-done-msg">' + ff_escape(message) + '</div>',
 		'  <div class="ff-done-ref">' + ff_escape(result.stock_entry) + '</div>',
 		result.intacct_key
 			? '  <div class="ff-done-key">Intacct ' + ff_escape(result.intacct_key) + '</div>'
 			: '',
 		'</div>',
-		'<button class="ff-submit" data-again="1">Do another</button>',
-		'<button class="ff-secondary" data-open="1">Open the document</button>'
+		'<div class="ff-actions">',
+		'  <button class="ff-submit" data-again="1">Do another</button>',
+		'  <button class="ff-secondary" data-open="1">Open the document</button>',
+		'</div>'
 	].join('\n'));
 
 	this.$root.find('[data-again]').on('click', function () {

@@ -551,7 +551,7 @@ WIP, needs a scan, a number and one green button.
 
 **Decision:** a Frappe desk **Page** (`fuse-floor`, "Shop Floor") shipped in
 `fuse_manufacturing`, with the server side in `floor.py`. Three flows: Confirm a
-batch, Issue to WIP, Move stock. The launcher tile lives in `fuse_theme` and is
+Works Orders, Issue to WIP, Item Transfer. The launcher tile lives in `fuse_theme` and is
 hidden when `fuse_manufacturing` is not installed.
 
 **Why a desk Page and not a portal page or a separate app:** session, roles and
