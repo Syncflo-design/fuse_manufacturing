@@ -451,31 +451,89 @@ FuseFloor.prototype.work_orders = function () {
 		freeze_message: 'Loading works orders',
 		callback: function (r) {
 			var orders = (r && r.message) || [];
-			var html = [self.header_html('Confirm a batch', 'Open works orders')];
 
-			if (!orders.length) {
-				html.push('<div class="ff-empty">No works orders are open.</div>');
-			} else {
-				html.push('<div class="ff-list">');
-				orders.forEach(function (wo, index) {
-					var left = flt(wo.qty) - flt(wo.produced_qty);
-					html.push(
-						'<button class="ff-row ff-row-wo" data-wo="' + index + '">' +
-						'  <span class="ff-row-main">' + ff_escape(wo.production_item) + '</span>' +
-						'  <span class="ff-row-sub">' + ff_escape(wo.item_name || '') + ' · ' + ff_escape(wo.name) + '</span>' +
-						'  <span class="ff-row-qty">' + ff_qty(left) + ' ' + ff_escape(wo.stock_uom) + ' left</span>' +
-						'</button>'
-					);
-				});
-				html.push('</div>');
-			}
+			self.render([
+				self.header_html('Confirm a batch', 'Open works orders'),
+				'<div class="ff-scan">',
+				'  <input class="ff-input" data-scan="1" placeholder="Scan a works order, or filter" ',
+				'         autocomplete="off" autocapitalize="off" spellcheck="false">',
+				'</div>',
+				'<div data-orders="1"></div>'
+			].join('\n'));
 
-			self.render(html.join('\n'));
 			self.bind_back();
-			self.$root.find('[data-wo]').on('click', function () {
-				self.ask_made(orders[$(this).data('wo')]);
+			self.paint_orders(orders, '');
+
+			// A works order number is not a barcode in the Item Barcode sense — it is
+			// the document's own name. Print it as Code-128 and the scanner simply
+			// types it, so an exact match goes straight in and anything else filters
+			// the list. No barcode table, no item lookup, nothing to configure.
+			self.$root.find('[data-scan]').on('keydown', function (e) {
+				if (e.which !== 13) return;
+				e.preventDefault();
+
+				var typed = ($(this).val() || '').trim();
+				var hit = null;
+				orders.forEach(function (wo) {
+					if (wo.name.toLowerCase() === typed.toLowerCase()) hit = wo;
+				});
+
+				if (hit) {
+					$(this).val('');
+					self.ask_made(hit);
+					return;
+				}
+				self.paint_orders(orders, typed);
+			});
+
+			self.$root.find('[data-scan]').on('input', function () {
+				self.paint_orders(orders, ($(this).val() || '').trim());
 			});
 		}
+	});
+};
+
+// The open orders, optionally narrowed. Matching is on the order number, the item
+// code and the description, because an operator knows the compound by name far more
+// often than by works order number.
+FuseFloor.prototype.paint_orders = function (orders, filter) {
+	var self = this;
+	var needle = (filter || '').toLowerCase();
+
+	var shown = orders.filter(function (wo) {
+		if (!needle) return true;
+		return [wo.name, wo.production_item, wo.item_name].some(function (field) {
+			return (field || '').toLowerCase().indexOf(needle) !== -1;
+		});
+	});
+
+	var html = [];
+	if (!orders.length) {
+		html.push('<div class="ff-empty">No works orders are open.</div>');
+	} else if (!shown.length) {
+		html.push('<div class="ff-empty">No open works order matches “' + ff_escape(filter) + '”.</div>');
+	} else {
+		html.push('<div class="ff-list">');
+		shown.forEach(function (wo) {
+			var left = flt(wo.qty) - flt(wo.produced_qty);
+			html.push(
+				'<button class="ff-row ff-row-wo" data-wo="' + ff_escape(wo.name) + '">' +
+				'  <span class="ff-row-main">' + ff_escape(wo.production_item) + '</span>' +
+				'  <span class="ff-row-sub">' + ff_escape(wo.item_name || '') + ' · ' + ff_escape(wo.name) + '</span>' +
+				'  <span class="ff-row-qty">' + ff_qty(left) + ' ' + ff_escape(wo.stock_uom) + ' left</span>' +
+				'</button>'
+			);
+		});
+		html.push('</div>');
+	}
+
+	var $orders = this.$root.find('[data-orders]');
+	$orders.html(html.join('\n'));
+	$orders.find('[data-wo]').on('click', function () {
+		var name = $(this).data('wo');
+		orders.forEach(function (wo) {
+			if (wo.name === name) self.ask_made(wo);
+		});
 	});
 };
 

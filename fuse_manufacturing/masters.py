@@ -1067,12 +1067,13 @@ def sync_items(modified_since=None):
 		# Rebuilt from Intacct each run rather than appended, so a barcode removed
 		# there disappears here instead of lingering and scanning to a stale item.
 		barcodes = []
-		upc = val(row, "UPC")
-		ean = val(row, "EAN13")
-		if upc:
-			barcodes.append({"barcode": upc, "barcode_type": "UPC-A"})
-		if ean and ean != upc:
-			barcodes.append({"barcode": ean, "barcode_type": "EAN"})
+		for value in (val(row, "UPC"), val(row, "EAN13")):
+			if not value or any(existing["barcode"] == value for existing in barcodes):
+				continue
+			# The type is only claimed when the number actually is one. See
+			# rules.barcode_type — a client's internal code scans exactly the same
+			# with no type, and tagging it would fail the item save outright.
+			barcodes.append({"barcode": value, "barcode_type": rules.barcode_type(value) or ""})
 		if barcodes or doc.get("barcodes"):
 			doc.set("barcodes", barcodes)
 

@@ -524,3 +524,47 @@ def kit_build_order(kit_codes, recipes):
 		pending = still_pending
 
 	return order, []
+
+
+def barcode_type(value):
+	"""The ERPNext Item Barcode type for a code, or None if it is not a GTIN.
+
+	ERPNext validates the length AND the check digit of anything tagged UPC-A or
+	EAN. That validation runs on save, so a tag we cannot stand behind does not
+	merely fail to scan — it fails the whole item, and the items sync reports the
+	item as an error every hour until someone fixes Intacct.
+
+	Clients number their own stock, their own works orders and their own bins, and
+	none of those are GTINs. An untyped barcode is not a lesser barcode: ERPNext
+	stores it, the scanner reads it, and `floor.find_item` matches it exactly the
+	same way. So the type is claimed only when the number really is one, and left
+	blank otherwise.
+
+	>>> barcode_type("4006381333931")   # a real EAN-13
+	'EAN'
+	>>> barcode_type("036000291452")    # a real UPC-A
+	'UPC-A'
+	>>> barcode_type("WO-2026-00014")   # a client's own numbering
+	>>> barcode_type("4006381333930")   # right shape, wrong check digit
+	"""
+	digits = (value or "").strip()
+	if not digits.isdigit():
+		return None
+
+	if len(digits) == 12:
+		kind = "UPC-A"
+	elif len(digits) == 13:
+		kind = "EAN"
+	else:
+		return None
+
+	# GTIN check digit: weight the body 3,1,3,1… from the right, and the total plus
+	# the check digit must reach the next multiple of ten.
+	total = 0
+	for position, char in enumerate(reversed(digits[:-1])):
+		total += int(char) * (3 if position % 2 == 0 else 1)
+
+	if (10 - total % 10) % 10 != int(digits[-1]):
+		return None
+
+	return kind
