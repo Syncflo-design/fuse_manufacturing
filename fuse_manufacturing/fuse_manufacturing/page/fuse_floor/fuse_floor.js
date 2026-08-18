@@ -31,7 +31,9 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 };
 
 frappe.pages['fuse-floor'].on_page_show = function (wrapper) {
-	if (wrapper.fuseFloor) wrapper.fuseFloor.reload_context();
+	if (!wrapper.fuseFloor) return;
+	wrapper.fuseFloor.collapse_sidebar();
+	wrapper.fuseFloor.reload_context();
 };
 
 // ---------------------------------------------------------------------------
@@ -74,8 +76,38 @@ function FuseFloor(page) {
 	this.page = page;
 	this.context = null;
 	this.$root = $('<div class="ff-root"></div>').appendTo(page.body);
+	this.collapse_sidebar();
 	this.reload_context();
 }
+
+// Get the desk sidebar out of the way on arrival.
+//
+// Clicks Frappe's OWN toggle rather than hiding the element, so the operator can
+// click it again to bring the sidebar back, and so nothing is left in a state the
+// desk does not know about. Only ever collapses, never force-expands — a tablet
+// user who deliberately opened it keeps it open on the next screen.
+//
+// The selector list is defensive across v15/v16 desk markup, and the poll covers
+// the sidebar rendering after the page does. Borrowed from nest_home.
+FuseFloor.prototype.collapse_sidebar = function () {
+	var tries = 0;
+	var timer = setInterval(function () {
+		tries++;
+		var $toggle = $('.sidebar-toggle-btn, .collapse-sidebar, .sidebar-toggle')
+			.filter(':visible')
+			.first();
+
+		if ($toggle.length) {
+			var $sidebar = $('.body-sidebar-container, .desk-sidebar').first();
+			var collapsed = $('body').is('.sidebar-collapsed') ||
+				$sidebar.is('.sidebar-collapsed, .collapsed');
+			if (!collapsed) $toggle.get(0).click();
+			clearInterval(timer);
+		} else if (tries > 15) {
+			clearInterval(timer);
+		}
+	}, 120);
+};
 
 FuseFloor.prototype.reload_context = function () {
 	var self = this;
