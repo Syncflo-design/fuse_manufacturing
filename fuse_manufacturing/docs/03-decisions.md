@@ -542,3 +542,45 @@ golden-source rule exists to prevent. It also means nothing needs deciding per c
   for horizontal expansion — for a future client who genuinely wants bins — rather than
   being built for a problem this client is about to remove.
 - Lot and serial are already sent when an item carries them; same rule, same source.
+
+## 2026-08-18 — Shop-floor screens are a desk Page in the integration app
+
+**Context:** the desk forms are the only way to record a movement, and they are
+desk-shaped. A mixer operator confirming a batch, or someone staging components to
+WIP, needs a scan, a number and one green button.
+
+**Decision:** a Frappe desk **Page** (`fuse-floor`, "Shop Floor") shipped in
+`fuse_manufacturing`, with the server side in `floor.py`. Three flows: Confirm a
+batch, Issue to WIP, Move stock. The launcher tile lives in `fuse_theme` and is
+hidden when `fuse_manufacturing` is not installed.
+
+**Why a desk Page and not a portal page or a separate app:** session, roles and
+permissions come free, and there is no second login for a factory to manage. It is
+also where the precedent is (`nest_crm_mobile`, `nest_home`).
+
+**Why in `fuse_manufacturing` and not `fuse_theme`:** it moves stock. That is
+behaviour, not decoration — the two-app rule (2026-08-06) puts it here, and the
+mobile-flows decision of the same date already named it.
+
+**Why it posts nothing itself:** every flow builds an ordinary Stock Entry and
+submits it, so `on_stock_entry_submit` fires exactly as it does from the desk form.
+One posting path, two front doors. A rejection from Intacct rolls the movement back
+and the operator sees Intacct's own words.
+
+**Consequences:**
+- Only `Material Transfer` and `Material Transfer for Manufacture` are reachable
+  from the transfer screen, and only `Manufacture` from the run screen. Receipting
+  and adjustments are not offered at all, not merely refused on submit.
+- The recipe explosion is ERPNext's own `make_stock_entry`. The screens correct
+  quantities; they never compute a recipe and never set a rate.
+- **No item carries a barcode yet** (`Item Barcode` is empty on Leadertread). The
+  scan box resolves item code first, then barcode, then a search — so it works today
+  by typing a code, and works with a scanner the day labels are printed, with no
+  deploy. Whether Intacct will hold the barcode, or whether Fuse prints its own, is
+  still open.
+- Posting switched off shows as a standing red banner on every screen. A shift
+  recorded while it is off would otherwise only surface at month end.
+- Warehouses are listed in full, never filtered by a `Fuse_WIP_` name pattern —
+  renaming them on a site must not need a code change. Last-used from/to is
+  remembered per flow in the browser, which is what makes the second batch three
+  taps.

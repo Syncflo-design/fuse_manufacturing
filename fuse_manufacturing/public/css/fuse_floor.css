@@ -1,0 +1,366 @@
+/* Fuse — shop floor screens.
+ *
+ * Sized for a gloved thumb on a phone held at arm's length in a factory, not for
+ * a mouse. Nothing here is smaller than 16px, no target smaller than 56px, and
+ * the contrast holds up under fluorescent light.
+ *
+ * Only .ff- classes are styled, so this cannot leak into the desk forms.
+ */
+
+.ff-root {
+	--ff-green: #17794a;
+	--ff-green-dark: #10603a;
+	--ff-line: #d8dde3;
+	--ff-ink: #1c2126;
+	--ff-muted: #667080;
+	--ff-bg: #ffffff;
+
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 12px 12px 64px;
+	font-size: 17px;
+	color: var(--ff-ink);
+}
+
+[data-theme="dark"] .ff-root {
+	--ff-line: #3a4149;
+	--ff-ink: #eceff2;
+	--ff-muted: #9aa4b0;
+	--ff-bg: #1b1f24;
+}
+
+/* --- the standing warning ------------------------------------------------ */
+
+.ff-warn {
+	background: #fdecea;
+	border: 1px solid #e0a9a2;
+	color: #8a2318;
+	border-radius: 8px;
+	padding: 12px 14px;
+	margin-bottom: 12px;
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+/* --- home ---------------------------------------------------------------- */
+
+.ff-menu {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.ff-tile {
+	display: block;
+	width: 100%;
+	text-align: left;
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-line);
+	border-radius: 12px;
+	padding: 20px 18px;
+	cursor: pointer;
+}
+
+.ff-tile:active {
+	border-color: var(--ff-green);
+}
+
+.ff-tile-title {
+	display: block;
+	font-size: 22px;
+	font-weight: 700;
+	color: var(--ff-ink);
+}
+
+.ff-tile-sub {
+	display: block;
+	margin-top: 4px;
+	font-size: 15px;
+	color: var(--ff-muted);
+}
+
+/* --- header -------------------------------------------------------------- */
+
+.ff-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.ff-back {
+	width: 48px;
+	height: 48px;
+	flex: 0 0 48px;
+	border: 2px solid var(--ff-line);
+	border-radius: 10px;
+	background: var(--ff-bg);
+	font-size: 22px;
+	line-height: 1;
+	color: var(--ff-ink);
+	cursor: pointer;
+}
+
+.ff-title {
+	font-size: 21px;
+	font-weight: 700;
+}
+
+.ff-sub {
+	font-size: 14px;
+	color: var(--ff-muted);
+}
+
+/* --- warehouse pair ------------------------------------------------------ */
+
+.ff-pair {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 14px;
+}
+
+.ff-label {
+	display: block;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ff-muted);
+}
+
+.ff-select {
+	display: block;
+	width: 100%;
+	min-height: 52px;
+	margin-top: 4px;
+	padding: 0 12px;
+	font-size: 17px;
+	color: var(--ff-ink);
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-line);
+	border-radius: 10px;
+}
+
+/* --- scan box ------------------------------------------------------------ */
+
+.ff-scan {
+	margin-bottom: 12px;
+}
+
+.ff-input {
+	width: 100%;
+	min-height: 60px;
+	padding: 0 14px;
+	font-size: 19px;
+	color: var(--ff-ink);
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-green);
+	border-radius: 10px;
+}
+
+.ff-input:focus {
+	outline: 3px solid rgba(23, 121, 74, 0.25);
+}
+
+/* --- lists --------------------------------------------------------------- */
+
+.ff-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: 14px;
+}
+
+.ff-row {
+	position: relative;
+	display: block;
+	width: 100%;
+	text-align: left;
+	min-height: 60px;
+	padding: 10px 74px 10px 14px;
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-line);
+	border-radius: 10px;
+	cursor: pointer;
+}
+
+.ff-row-static {
+	cursor: default;
+}
+
+.ff-row-main {
+	display: block;
+	font-size: 17px;
+	font-weight: 700;
+	color: var(--ff-ink);
+}
+
+.ff-row-sub {
+	display: block;
+	font-size: 14px;
+	color: var(--ff-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ff-row-qty {
+	position: absolute;
+	right: 14px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--ff-green);
+	text-align: right;
+}
+
+.ff-row-wo .ff-row-qty {
+	max-width: 110px;
+	line-height: 1.2;
+}
+
+/* Quantity boxes on the run-confirmation list sit where the figure would be. */
+
+.ff-qty-input {
+	position: absolute;
+	right: 58px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 92px;
+	height: 44px;
+	padding: 0 8px;
+	font-size: 17px;
+	font-weight: 700;
+	text-align: right;
+	color: var(--ff-ink);
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-line);
+	border-radius: 8px;
+}
+
+.ff-row-unit {
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 14px;
+	color: var(--ff-muted);
+	max-width: 40px;
+	overflow: hidden;
+}
+
+.ff-remove {
+	position: absolute;
+	right: 8px;
+	top: 8px;
+	width: 36px;
+	height: 36px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--ff-muted);
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+/* --- notes, empties, results --------------------------------------------- */
+
+.ff-note,
+.ff-empty {
+	padding: 12px 14px;
+	margin-bottom: 12px;
+	font-size: 15px;
+	line-height: 1.4;
+	color: var(--ff-muted);
+	border: 1px dashed var(--ff-line);
+	border-radius: 10px;
+}
+
+.ff-onhand {
+	font-size: 16px;
+	line-height: 1.5;
+	margin-bottom: 8px;
+}
+
+.ff-made {
+	padding: 12px 14px;
+	margin-bottom: 12px;
+	font-size: 16px;
+	line-height: 1.4;
+	background: rgba(23, 121, 74, 0.08);
+	border-radius: 10px;
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.ff-submit {
+	display: block;
+	width: 100%;
+	min-height: 64px;
+	font-size: 20px;
+	font-weight: 700;
+	color: #ffffff;
+	background: var(--ff-green);
+	border: none;
+	border-radius: 12px;
+	cursor: pointer;
+}
+
+.ff-submit:active {
+	background: var(--ff-green-dark);
+}
+
+.ff-submit:disabled {
+	background: var(--ff-line);
+	color: var(--ff-muted);
+	cursor: default;
+}
+
+.ff-secondary {
+	display: block;
+	width: 100%;
+	min-height: 56px;
+	margin-top: 10px;
+	font-size: 17px;
+	font-weight: 600;
+	color: var(--ff-ink);
+	background: var(--ff-bg);
+	border: 2px solid var(--ff-line);
+	border-radius: 12px;
+	cursor: pointer;
+}
+
+/* --- done ---------------------------------------------------------------- */
+
+.ff-done {
+	text-align: center;
+	padding: 32px 16px;
+	margin-bottom: 16px;
+	border: 2px solid var(--ff-green);
+	border-radius: 12px;
+}
+
+.ff-tick {
+	font-size: 52px;
+	line-height: 1;
+	color: var(--ff-green);
+}
+
+.ff-done-msg {
+	margin-top: 10px;
+	font-size: 21px;
+	font-weight: 700;
+}
+
+.ff-done-ref {
+	margin-top: 6px;
+	font-size: 16px;
+	color: var(--ff-muted);
+}
+
+.ff-done-key {
+	margin-top: 2px;
+	font-size: 14px;
+	color: var(--ff-muted);
+}
