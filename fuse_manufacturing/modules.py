@@ -40,6 +40,11 @@ MODULES = [
 		"description": "Move stock between warehouses.",
 	},
 	{
+		"key": "stock",
+		"label": "Stock",
+		"description": "ERPNext's own Stock workspace — the full module, for general stock management.",
+	},
+	{
 		"key": "stock_control",
 		"label": "Stock Control",
 		"description": "Transfers, production and stock reports.",

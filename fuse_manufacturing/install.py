@@ -305,6 +305,14 @@ ROLE_PERMISSIONS = {
 	"BOM": _READ_ONLY,
 	"Item Alternative": _READ_ONLY,
 	"Intacct Bin": _READ_ONLY,
+	# The stock reports the Stock Control workspace links to all read these, and a role
+	# without them opens that workspace to an error rather than to a report. Administrator
+	# bypasses permissions entirely, so this gap is invisible to whoever built the site and
+	# hits every real user — which is exactly how it was found, on 2026-08-19.
+	#   Stock Balance / Stock Ledger  -> Stock Ledger Entry
+	#   Stock Projected Qty           -> Bin
+	"Stock Ledger Entry": _READ_ONLY,
+	"Bin": _READ_ONLY,
 	# Goods ARE received here now, so the role that receives them needs the document.
 	# Withdrawn again when the Receiving module is switched off — see _apply_role_permissions.
 	# delete stays 0 like every other posted movement, and cancel stays 1 so the refusal
