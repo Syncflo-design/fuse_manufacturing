@@ -377,7 +377,7 @@ they are reachable from a lightweight mobile page, not only from a desk form.
 
 **Why:** the donor has a working mobile/barcode version and the client's people already
 use it. Retrofitting mobile onto logic buried in desk form hooks means writing it twice.
-See [[barcodes-mobile-only]] — barcodes are a mobile-only feature, not a desktop one.
+Barcodes were a mobile-only feature in the donor, not a desktop one.
 
 **Consequences:** posting logic lives in plain whitelisted functions taking explicit
 arguments, not in `on_submit` handlers that assume a fully-populated desk document. The
@@ -584,3 +584,24 @@ and the operator sees Intacct's own words.
   renaming them on a site must not need a code change. Last-used from/to is
   remembered per flow in the browser, which is what makes the second batch three
   taps.
+
+## 2026-08-18 — Scanning is not mobile-only; the desk receiving screen keeps it
+
+**Context:** the donor treated barcode scanning as a mobile feature, and the
+2026-08-06 note here repeated that. The desk receiving screen scans, which
+contradicted it.
+
+**Decision:** scanning stays on the desk screen. Russell's call — receiving may well
+want it, and the cost of leaving the option in is nothing.
+
+**Why:** a wedge scanner types into whatever has focus, so supporting it on a desk
+screen is a focused input and a keypress handler, not a feature. Removing it would
+have been work done to honour a note rather than a need.
+
+**Consequences:**
+- Both receiving front doors scan. The desk one steps the scanned line's accepted
+  quantity up by one and flashes the row; the floor one opens the line for capture.
+- The mobile-only framing does not apply to Fuse and should not be repeated. It came
+  from the donor, where desktop scanning had been deliberately removed.
+- Scan resolution is shared either way — `scanning.resolve_scan` — so a scanner
+  pointed at a pallet, bin or works order is identified the same on both.
