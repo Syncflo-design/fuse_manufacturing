@@ -69,20 +69,33 @@ def build_transfer_xml(*, transaction_date, reference_no, description, legs, loc
 	return function
 
 
-# Manufacturing definitions, named exactly as Intacct holds them.
+# The four manufacturing PROCESSES. These were the Intacct definition names until
+# 2026-08-19; they are now process keys, looked up per company under Transactions on
+# Intacct Settings. The old names survive as seeds in transactions.PROCESSES, so a site
+# that already worked keeps working — but they are never a fallback, because a name that
+# is right for Leadertread means nothing on the next client.
 #
-# The donor's code says the two reversal definitions are convert-only. In leadertread-imp
-# both are active with CREATETYPE "New document or Convert", i.e. postable directly —
-# checked against INVDOCUMENTPARAMS, not assumed. Definitions are per-company
-# configuration, so the `definitions` job re-checks them on every client.
+# Note the asymmetry the mapping has to preserve. UPDATES_COST is why a reversal is not
+# the forward document negated: the cost sits on the increase leg either way, so it moves
+# from the finished goods to the components when the direction flips.
 #
-# Note the asymmetry in UPDATES_COST. It is the whole reason a reversal is not the forward
-# document negated: the cost sits on the increase leg either way, so it moves from the
-# finished goods to the components when the direction flips.
-MANUFACTURING_PRODUCE = "Manufacturing Run Increase"      # Increase, UPDATES_COST=true
-MANUFACTURING_CONSUME = "Manufacturing Backflush Decr"    # Decrease, UPDATES_COST=false
-MANUFACTURING_UNPRODUCE = "Manufacturing Run Decrease"    # Decrease, UPDATES_COST=false
-MANUFACTURING_UNCONSUME = "Manufacturing Backflush Incr"  # Increase, UPDATES_COST=true
+#   produce    Increase, UPDATES_COST=true    unproduce  Decrease, no cost
+#   consume    Decrease, no cost              unconsume  Increase, UPDATES_COST=true
+MANUFACTURING_PRODUCE = "manufacture_produce"
+MANUFACTURING_CONSUME = "manufacture_consume"
+MANUFACTURING_UNPRODUCE = "manufacture_unproduce"
+MANUFACTURING_UNCONSUME = "manufacture_unconsume"
+
+
+def mapped_definition(process_key):
+	"""The Intacct definition this company maps to a process. Refuses if unmapped.
+
+	Not named `definition`: two builders below take a `definition` keyword, and a helper
+	sharing that name is one careless edit away from being shadowed by a parameter.
+	"""
+	from fuse_manufacturing import transactions
+
+	return transactions.definition_for(process_key)
 
 # Stock adjustments are NOT posted from Fuse.
 #
@@ -256,14 +269,14 @@ def post_stock_entry_manufacture(stock_entry, dry_run=False):
 	legs["produce"][0]["bin"] = _default_bin(produced["warehouse"], produced["item_code"])
 
 	consume_fn = build_ictransaction_xml(
-		definition=MANUFACTURING_CONSUME,
+		definition=mapped_definition(MANUFACTURING_CONSUME),
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
 		lines=legs["consume"],
 		location_id=entity,
 	)
 	produce_fn = build_ictransaction_xml(
-		definition=MANUFACTURING_PRODUCE,
+		definition=mapped_definition(MANUFACTURING_PRODUCE),
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
 		lines=legs["produce"],
@@ -426,7 +439,7 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 	# admin ever attaches a scheme, these can simply stop being sent — the "FR-" prefix
 	# cannot collide with anything Intacct issues in the meantime.
 	unproduce_fn = build_ictransaction_xml(
-		definition=MANUFACTURING_UNPRODUCE,
+		definition=mapped_definition(MANUFACTURING_UNPRODUCE),
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
 		document_no=rules.document_number_for("Stock Entry", doc.name, "manufacture-reverse", 1),
@@ -434,7 +447,7 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 		location_id=entity,
 	)
 	unconsume_fn = build_ictransaction_xml(
-		definition=MANUFACTURING_UNCONSUME,
+		definition=mapped_definition(MANUFACTURING_UNCONSUME),
 		posting_date=doc.posting_date,
 		reference_no=doc.name,
 		document_no=rules.document_number_for("Stock Entry", doc.name, "manufacture-reverse", 2),
@@ -630,12 +643,6 @@ def _default_bin(warehouse, item_code):
 # Goods receipt — a PO Receiver, converted from the purchase order
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Intacct's receiving definition. A receipt is not a fresh document: it CONVERTS the
-# purchase order, which is what moves that order to Partially Converted / Converted —
-# the states the order sync reads to decide what is still outstanding.
-PO_RECEIVER = "PO Receiver-Inventory"
-
-
 def build_potransaction_xml(*, definition, posting_date, created_from, vendor_id, lines,
                             location_id, reference_no=None, vendor_doc_no=None,
                             document_no=None):
@@ -804,7 +811,7 @@ def post_purchase_receipt(purchase_receipt, dry_run=False):
 	lines = _receipt_lines(doc)
 
 	function = build_potransaction_xml(
-		definition=PO_RECEIVER,
+		definition=mapped_definition("goods_receipt"),
 		posting_date=doc.posting_date,
 		created_from=created_from,
 		vendor_id=vendor_id,

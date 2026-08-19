@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-19 00:00:00.000000",
+ "description": "One Fuse process and the Intacct definition it posts to. Rows are kept in step with the registry in fuse_manufacturing/transactions.py on every migrate; only the chosen definition is the client's.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "label",
+  "definition",
+  "description",
+  "process_key",
+  "required"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Process",
+   "read_only": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "definition",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Intacct Definition",
+   "options": "Intacct Transaction Definition",
+   "description": "Picked from what this company has. Empty means the process cannot post."
+  },
+  {
+   "columns": 5,
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "What it posts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "process_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "read_only": 1,
+   "description": "Permanent. The postings look the definition up by this, so renaming one silently unmaps the process."
+  },
+  {
+   "default": "1",
+   "fieldname": "required",
+   "fieldtype": "Check",
+   "label": "Required to post",
+   "read_only": 1,
+   "description": "Whether leaving this empty stops the process working at all."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Intacct Transaction Mapping",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

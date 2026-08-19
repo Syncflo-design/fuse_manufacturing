@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:definition_id",
+ "creation": "2026-08-19 00:00:00.000000",
+ "description": "A transaction definition as Intacct holds it — purchasing, inventory or order entry. Mirror only. It exists so every process in Fuse PICKS the definition it posts to from what this company actually has, instead of carrying a name copied from another client.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "definition_id",
+  "description",
+  "source",
+  "doc_class",
+  "column_break_1",
+  "status",
+  "create_type",
+  "auto_numbered",
+  "updates_inventory",
+  "updates_cost",
+  "in_out",
+  "intacct_recordno"
+ ],
+ "fields": [
+  {
+   "fieldname": "definition_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Definition",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1,
+   "description": "DOCID, exactly as Intacct spells it. A posting sends this character for character."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Area",
+   "options": "Purchasing\nInventory\nOrder Entry",
+   "read_only": 1,
+   "description": "Which Intacct object it came from: PODOCUMENTPARAMS, INVDOCUMENTPARAMS or SODOCUMENTPARAMS."
+  },
+  {
+   "fieldname": "doc_class",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Class",
+   "read_only": 1,
+   "description": "Order, Received, Invoiced and so on — what separates a purchase order from the receipt that converts it."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "create_type",
+   "fieldtype": "Data",
+   "label": "Create Type",
+   "read_only": 1,
+   "description": "A convert-only definition cannot be posted as a new document. Correct for a goods receipt, which converts the order; wrong for a production run, which does not."
+  },
+  {
+   "fieldname": "auto_numbered",
+   "fieldtype": "Data",
+   "label": "Numbered by Intacct",
+   "read_only": 1,
+   "description": "Without a numbering scheme Intacct rejects the post with PL01000127 'Document Number is missing' — an error that says nothing about numbering and sends you looking at the line items."
+  },
+  {
+   "fieldname": "updates_inventory",
+   "fieldtype": "Data",
+   "label": "Updates Inventory",
+   "read_only": 1
+  },
+  {
+   "fieldname": "updates_cost",
+   "fieldtype": "Data",
+   "label": "Updates Cost",
+   "read_only": 1,
+   "description": "Whether the definition values the movement. A cost is only ever sent where this is true — on a consume leg it would overwrite Intacct's own valuation."
+  },
+  {
+   "fieldname": "in_out",
+   "fieldtype": "Data",
+   "label": "Direction",
+   "read_only": 1,
+   "description": "Increase or Decrease. The definition applies its own sign, which is why quantities are always sent positive."
+  },
+  {
+   "fieldname": "intacct_recordno",
+   "fieldtype": "Data",
+   "label": "Intacct RECORDNO",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Intacct Transaction Definition",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Stock User"
+  }
+ ],
+ "search_fields": "description,doc_class,source",
+ "sort_field": "definition_id",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

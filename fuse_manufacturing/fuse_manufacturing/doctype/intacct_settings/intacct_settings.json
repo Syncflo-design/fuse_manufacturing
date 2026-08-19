@@ -16,6 +16,8 @@
   "user_password",
   "entity_section",
   "entity_id",
+  "transactions_section",
+  "transaction_mappings",
   "modules_section",
   "active_modules",
   "defaults_section",
@@ -103,6 +105,18 @@
    "fieldtype": "Data",
    "label": "Entity ID (locationid)",
    "description": "Manufacturing transaction definitions are set to 'Entity only'. Without this the login is rejected with BL01001973."
+  },
+  {
+   "fieldname": "transactions_section",
+   "fieldtype": "Section Break",
+   "label": "Transactions",
+   "description": "Which Intacct definition each Fuse process posts to. Every company names these differently — Leadertread's goods receipt is \"Goods received voucher\"; another company calls the same thing something else — so nothing here is defaulted from another client. The list is what THIS company has, read from Intacct; run masters.sync_transaction_definitions to refresh it. A process with nothing mapped refuses to post rather than guessing."
+  },
+  {
+   "fieldname": "transaction_mappings",
+   "fieldtype": "Table",
+   "label": "Process mapping",
+   "options": "Intacct Transaction Mapping"
   },
   {
    "fieldname": "modules_section",

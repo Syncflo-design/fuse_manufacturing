@@ -130,13 +130,28 @@ def list_transaction_definitions(company=None):
 
 	# Flag the ones the postings depend on, so a name mismatch is obvious rather than
 	# surfacing later as a rejection nobody can place.
-	from fuse_manufacturing import postings
+	#
+	# Read from the mapping, not from constants: since 2026-08-19 the postings look their
+	# definitions up per company, so what this site depends on is whatever an admin chose
+	# under Transactions. A process nobody has mapped yet is not "missing" here — it is
+	# reported as unmapped by transactions.mapping_status, which is a different fault with
+	# a different fix.
+	from fuse_manufacturing import postings, transactions
 
+	mapped = {
+		row["key"]: row["definition"]
+		for row in transactions.mapping_status()["processes"]
+		if row["definition"]
+	}
 	required = {
-		postings.MANUFACTURING_CONSUME,
-		postings.MANUFACTURING_PRODUCE,
-		postings.MANUFACTURING_UNCONSUME,
-		postings.MANUFACTURING_UNPRODUCE,
+		mapped[key]
+		for key in (
+			postings.MANUFACTURING_CONSUME,
+			postings.MANUFACTURING_PRODUCE,
+			postings.MANUFACTURING_UNCONSUME,
+			postings.MANUFACTURING_UNPRODUCE,
+		)
+		if key in mapped
 	}
 	present = {d["docid"] for d in definitions}
 	missing = sorted(required - present)
@@ -152,7 +167,11 @@ def list_transaction_definitions(company=None):
 	# Fuse sends its own documentno on these, so Intacct not numbering them is expected
 	# rather than a fault. INHERIT_SOURCE_DOCNO does not help — it only applies when a
 	# document is created by converting another, and these are created directly.
-	fuse_numbers = {postings.MANUFACTURING_UNCONSUME, postings.MANUFACTURING_UNPRODUCE}
+	fuse_numbers = {
+		mapped[key]
+		for key in (postings.MANUFACTURING_UNCONSUME, postings.MANUFACTURING_UNPRODUCE)
+		if key in mapped
+	}
 
 	unnumbered = [d["docid"] for d in definitions if d["docid"] in required and not is_true(d["auto_numbered"])]
 	not_numbered = sorted(docid for docid in unnumbered if docid not in fuse_numbers)
@@ -597,6 +616,108 @@ def list_purchasing_definitions(company=None):
 		"definitions": definitions,
 		"po_receiver_inventory": receiver[0] if receiver else None,
 		"receiver_found": bool(receiver),
+	}
+
+
+@frappe.whitelist()
+def sync_transaction_definitions(company=None):
+	"""Mirror every transaction definition this company has, so processes can PICK one.
+
+	Purchasing, inventory and order entry together, because a Fuse process cares which
+	document it posts and not which Intacct module the definition happens to live in.
+
+	A mirror, not an archive: definitions Intacct no longer reports are removed. Leaving
+	them would offer an admin a name that fails the moment it is used.
+
+	Field sets are attempted rich and fall back to the three every *DOCUMENTPARAMS object
+	is known to accept, so one unrecognised field name on one object returns a shorter
+	answer instead of nothing at all.
+	"""
+	sources = {
+		"Purchasing": (
+			"PODOCUMENTPARAMS",
+			["RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "STATUS", "ENABLE_SEQNUM",
+			 "UPDATES_INV", "CREATETYPE"],
+		),
+		"Inventory": (
+			"INVDOCUMENTPARAMS",
+			["RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "STATUS", "ENABLE_SEQNUM",
+			 "UPDATES_INV", "CREATETYPE", "UPDATES_COST", "IN_OUT"],
+		),
+		"Order Entry": (
+			"SODOCUMENTPARAMS",
+			["RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "STATUS", "ENABLE_SEQNUM",
+			 "UPDATES_INV", "CREATETYPE"],
+		),
+	}
+
+	seen, problems = [], []
+
+	for source, (obj, wanted) in sources.items():
+		try:
+			rows = gateway.query(obj, wanted, company=company)
+		except Exception:
+			try:
+				rows = gateway.query(obj, ["DOCID", "DOCCLASS", "STATUS"], company=company)
+			except Exception as err:
+				# One area failing must not cost the others. A company without order
+				# entry configured is normal, not an error worth aborting on.
+				problems.append(f"{obj}: {err}")
+				continue
+
+		for row in rows:
+			definition_id = val(row, "DOCID")
+			if not definition_id:
+				continue
+			seen.append(definition_id)
+
+			values = {
+				"description": val(row, "DESCRIPTION"),
+				"source": source,
+				"doc_class": val(row, "DOCCLASS"),
+				"status": val(row, "STATUS"),
+				"create_type": val(row, "CREATETYPE"),
+				"auto_numbered": val(row, "ENABLE_SEQNUM"),
+				"updates_inventory": val(row, "UPDATES_INV"),
+				"updates_cost": val(row, "UPDATES_COST"),
+				"in_out": val(row, "IN_OUT"),
+				"intacct_recordno": val(row, "RECORDNO"),
+			}
+
+			if frappe.db.exists("Intacct Transaction Definition", definition_id):
+				doc = frappe.get_doc("Intacct Transaction Definition", definition_id)
+				doc.update(values)
+				if _has_changes(doc):
+					doc.save(ignore_permissions=True)
+			else:
+				doc = frappe.new_doc("Intacct Transaction Definition")
+				doc.definition_id = definition_id
+				doc.update(values)
+				doc.insert(ignore_permissions=True)
+
+	removed = 0
+	for name in frappe.get_all(
+		"Intacct Transaction Definition",
+		filters={"name": ["not in", seen or [""]]},
+		pluck="name",
+	):
+		frappe.delete_doc(
+			"Intacct Transaction Definition", name, ignore_permissions=True, force=True
+		)
+		removed += 1
+
+	frappe.db.commit()
+
+	# The picker is only useful once the processes that read it exist.
+	from fuse_manufacturing import transactions
+
+	transactions.sync_processes()
+
+	return {
+		"definitions": len(seen),
+		"removed": removed,
+		"problems": problems,
+		"unmapped": transactions.mapping_status()["unmapped"],
 	}
 
 
@@ -2043,6 +2164,11 @@ def _sync_config(company=None):
 		"warehouses": sync_warehouses(company=company),
 		"uoms": sync_uoms(),
 		"bins": sync_bins(company=company),
+		# Definitions are configuration someone changes deliberately in Intacct, so daily
+		# is plenty. It matters that this runs at all: a definition renamed there would
+		# otherwise leave a process mapped to a name that no longer exists, and the first
+		# anyone would know is a rejection at a delivery.
+		"transaction_definitions": sync_transaction_definitions(company=company),
 	}
 
 

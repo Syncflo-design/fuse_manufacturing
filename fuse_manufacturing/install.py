@@ -414,9 +414,12 @@ def after_install():
 
 	# Before permissions: they are derived from what is switched on, so the table has to
 	# exist and be in step with the registry first.
-	from fuse_manufacturing import modules
+	from fuse_manufacturing import modules, transactions
 
 	modules.sync_modules()
+	# The process rows exist even before anything is mapped, so an admin opening the
+	# settings sees what Fuse needs rather than an empty table that explains nothing.
+	transactions.sync_processes()
 
 	reports = _apply_role_permissions()
 	frappe.db.commit()
@@ -428,5 +431,6 @@ def after_install():
 		"role": ROLE,
 		"role_permissions": sorted(ROLE_PERMISSIONS),
 		"active_modules": modules.active_modules(),
+		"unmapped_transactions": transactions.mapping_status()["unmapped"],
 		"reports_granted": reports,
 	}
