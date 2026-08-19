@@ -352,7 +352,7 @@ def _apply_role_permissions():
 	the 2026-05-20 gotcha working for us rather than against us. It also runs whenever
 	Intacct Settings is saved, so a toggle takes effect immediately.
 	"""
-	from frappe.permissions import add_permission, remove_permission, update_permission_property
+	from frappe.permissions import add_permission, update_permission_property
 
 	from fuse_manufacturing import modules
 
@@ -372,7 +372,16 @@ def _apply_role_permissions():
 			# Removed, not zeroed. A row with every permission set to 0 still reads as
 			# "this role has an opinion about this doctype", and the next person to look
 			# cannot tell it apart from a mistake.
-			remove_permission(doctype, ROLE, 0)
+			#
+			# Deleted directly rather than through a helper: frappe.permissions has
+			# add_permission and update_permission_property but NO remove_permission.
+			# Calling one that does not exist raised at import time, inside after_migrate,
+			# which failed every migrate from 2026-08-19 09:21 and rolled the site back to
+			# the previous release without any of this reaching it.
+			frappe.db.delete(
+				"Custom DocPerm", {"parent": doctype, "role": ROLE, "permlevel": 0}
+			)
+			frappe.clear_cache(doctype=doctype)
 			continue
 
 		add_permission(doctype, ROLE, 0)
