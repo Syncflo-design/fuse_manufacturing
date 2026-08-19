@@ -305,8 +305,14 @@ ROLE_PERMISSIONS = {
 	"BOM": _READ_ONLY,
 	"Item Alternative": _READ_ONLY,
 	"Intacct Bin": _READ_ONLY,
+	# Goods ARE received here now, so the role that receives them needs the document.
+	# Withdrawn again when the Receiving module is switched off — see _apply_role_permissions.
+	# delete stays 0 like every other posted movement, and cancel stays 1 so the refusal
+	# in postings.on_purchase_receipt_cancel is what the user meets, rather than a bare
+	# permission error that explains nothing.
+	"Purchase Receipt": _FULL,
 	# Mirrored from Intacct so stock on order reaches the reports. Read only on purpose:
-	# these are not orders anyone raises or receives here.
+	# these are orders nobody raises here — only receives against.
 	"Purchase Order": _READ_ONLY,
 	"Supplier": _READ_ONLY,
 	# READ ONLY DELIBERATELY. Stock Reconciliation does not post to Intacct — it is what
@@ -338,12 +344,37 @@ ROLE_REPORTS = (
 
 
 def _apply_role_permissions():
-	"""Grant the role what it needs, and only read where Intacct owns the data."""
-	from frappe.permissions import add_permission, update_permission_property
+	"""Grant the role what it needs, and only read where Intacct owns the data.
+
+	Module-aware since 2026-08-18: a doctype belonging to a switched-off module is
+	withdrawn rather than granted. Because this runs on every migrate, a deploy
+	re-asserting permissions reinstates the client's choice instead of overriding it —
+	the 2026-05-20 gotcha working for us rather than against us. It also runs whenever
+	Intacct Settings is saved, so a toggle takes effect immediately.
+	"""
+	from frappe.permissions import add_permission, remove_permission, update_permission_property
+
+	from fuse_manufacturing import modules
+
+	active = modules.active_modules()
+	withdrawn = {
+		doctype
+		for key, doctypes in modules.MODULE_DOCTYPES.items()
+		if not active.get(key, True)
+		for doctype in doctypes
+	}
 
 	for doctype, perms in ROLE_PERMISSIONS.items():
 		if not frappe.db.exists("DocType", doctype):
 			continue
+
+		if doctype in withdrawn:
+			# Removed, not zeroed. A row with every permission set to 0 still reads as
+			# "this role has an opinion about this doctype", and the next person to look
+			# cannot tell it apart from a mistake.
+			remove_permission(doctype, ROLE, 0)
+			continue
+
 		add_permission(doctype, ROLE, 0)
 		for ptype, value in perms.items():
 			update_permission_property(doctype, ROLE, 0, ptype, value, validate=False)
@@ -381,6 +412,12 @@ def after_install():
 			{"doctype": "Role", "role_name": ROLE, "desk_access": 1, "is_custom": 1}
 		).insert(ignore_permissions=True)
 
+	# Before permissions: they are derived from what is switched on, so the table has to
+	# exist and be in step with the registry first.
+	from fuse_manufacturing import modules
+
+	modules.sync_modules()
+
 	reports = _apply_role_permissions()
 	frappe.db.commit()
 
@@ -390,5 +427,6 @@ def after_install():
 		"created_or_updated": created,
 		"role": ROLE,
 		"role_permissions": sorted(ROLE_PERMISSIONS),
+		"active_modules": modules.active_modules(),
 		"reports_granted": reports,
 	}

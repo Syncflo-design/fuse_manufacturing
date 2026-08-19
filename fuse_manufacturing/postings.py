@@ -864,3 +864,48 @@ def on_purchase_receipt_cancel(doc, method=None):
 		"cancelled here. Reverse the receiver in Intacct first — Fuse does not yet post a "
 		"reverse conversion."
 	)
+
+
+def block_inactive_module(doc, method=None):
+	"""Refuse a movement whose module the client has switched off.
+
+	Permissions cannot do this one. All three movement modules raise the same document —
+	a Stock Entry — and a role either may raise them or may not; the purpose is what
+	tells them apart, and that is only knowable per document.
+
+	Deliberately a refusal with a reason rather than a silent no-op. Someone who reached
+	this form from a bookmark, the awesome bar or a report link has done nothing wrong,
+	and "Item Transfer is switched off for this site" tells them who to ask.
+	"""
+	from fuse_manufacturing import modules
+
+	key = modules.purpose_module(doc.purpose)
+	if not key:
+		return
+	if modules.is_active(key):
+		return
+
+	label = modules.MODULES_BY_KEY.get(key, {}).get("label", key)
+	frappe.throw(
+		f"{label} is switched off for this site, so this movement cannot be recorded.\n\n"
+		"An administrator can switch it back on under Active Modules in Intacct Settings.",
+		title=f"{label} is switched off",
+	)
+
+
+def block_inactive_receiving(doc, method=None):
+	"""The same refusal for a goods receipt.
+
+	Receiving is withdrawn by permission as well, so most users never reach this. It
+	still exists for the ones who hold another role that grants Purchase Receipt —
+	Stock Manager, say — where the module switch would otherwise mean nothing.
+	"""
+	from fuse_manufacturing import modules
+
+	if modules.is_active("receiving"):
+		return
+	frappe.throw(
+		"Receiving is switched off for this site, so a delivery cannot be booked in.\n\n"
+		"An administrator can switch it back on under Active Modules in Intacct Settings.",
+		title="Receiving is switched off",
+	)

@@ -16,6 +16,8 @@
   "user_password",
   "entity_section",
   "entity_id",
+  "modules_section",
+  "active_modules",
   "defaults_section",
   "default_item_group",
   "reject_warehouse",
@@ -101,6 +103,18 @@
    "fieldtype": "Data",
    "label": "Entity ID (locationid)",
    "description": "Manufacturing transaction definitions are set to 'Entity only'. Without this the login is rejected with BL01001973."
+  },
+  {
+   "fieldname": "modules_section",
+   "fieldtype": "Section Break",
+   "label": "Active Modules",
+   "description": "Which parts of Fuse appear on the Fuse Home page. Switching one off removes its tile and nothing else — the screens behind it still work for anyone who reaches them another way. This is a launcher preference, not a permission."
+  },
+  {
+   "fieldname": "active_modules",
+   "fieldtype": "Table",
+   "label": "Modules",
+   "options": "Fuse Active Module"
   },
   {
    "fieldname": "defaults_section",

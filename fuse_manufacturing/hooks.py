@@ -25,7 +25,12 @@ doc_events = {
 	"Stock Entry": {
 		# Material Receipt and Material Issue are refused: Fuse posts movements, not
 		# general adjustments. On-hand corrections go through Intacct's Cycle Count.
-		"validate": "fuse_manufacturing.postings.block_stock_adjustment",
+		"validate": [
+			"fuse_manufacturing.postings.block_stock_adjustment",
+			# A switched-off module refuses its own movements. Permissions cannot separate
+			# them: all three raise a Stock Entry and only the purpose tells them apart.
+			"fuse_manufacturing.postings.block_inactive_module",
+		],
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
 	},
@@ -35,6 +40,7 @@ doc_events = {
 	# with the posting that replaces it — never one without the other, because a receipt
 	# that submits without posting adds stock Intacct never saw.
 	"Purchase Receipt": {
+		"validate": "fuse_manufacturing.postings.block_inactive_receiving",
 		"on_submit": "fuse_manufacturing.postings.on_purchase_receipt_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_purchase_receipt_cancel",
 	},
