@@ -1,0 +1,280 @@
+/* Fuse — receiving at a desk.
+ *
+ * Desk-width sibling of the Shop Floor screen. Same palette and the same rules —
+ * deferring to fuse_theme's variables where it is installed — but laid out as a
+ * table, because at a desk the whole order should be visible at once.
+ *
+ * Only .fr- classes are styled, so nothing here reaches the desk forms.
+ */
+
+.fr-root {
+	--fr-green: var(--fuse-green, #007E45);
+	--fr-green-dark: var(--fuse-green-dark, #006034);
+	--fr-tint: var(--fuse-green-tint, #E7F4ED);
+	--fr-ink: #0F172A;
+	--fr-muted: #475569;
+	--fr-line: #CBD5E1;
+	--fr-bg: #FFFFFF;
+	--fr-sunken: #F1F5F9;
+	--fr-danger: #B91C1C;
+	--fr-danger-bg: #FEF2F2;
+
+	padding: 8px 4px 48px;
+	color: var(--fr-ink);
+	font-size: 14px;
+}
+
+[data-theme="dark"] .fr-root {
+	--fr-ink: #F1F5F9;
+	--fr-muted: #B6C2D2;
+	--fr-line: #45505F;
+	--fr-bg: #1B1F24;
+	--fr-sunken: #22272E;
+	--fr-danger: #FCA5A5;
+	--fr-danger-bg: #3B1A1A;
+	--fr-tint: rgba(0, 126, 69, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fr-root * {
+		transition: none !important;
+		animation: none !important;
+	}
+}
+
+.fr-root :focus-visible {
+	outline: 2px solid var(--fr-green);
+	outline-offset: 2px;
+}
+
+/* --- header -------------------------------------------------------------- */
+
+.fr-head {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 16px;
+}
+
+.fr-title {
+	font-size: 20px;
+	font-weight: 700;
+}
+
+.fr-sub {
+	font-size: 13px;
+	color: var(--fr-muted);
+}
+
+.fr-back {
+	background: var(--fr-bg);
+	border: 1px solid var(--fr-line);
+	border-radius: 8px;
+	padding: 8px 12px;
+	font-size: 13px;
+	color: var(--fr-ink);
+	cursor: pointer;
+}
+
+.fr-back:hover {
+	border-color: var(--fr-green);
+}
+
+.fr-warn {
+	background: var(--fr-danger-bg);
+	border: 1px solid var(--fr-danger);
+	color: var(--fr-danger);
+	border-radius: 8px;
+	padding: 10px 14px;
+	margin-bottom: 14px;
+	font-weight: 600;
+}
+
+/* --- search / scan ------------------------------------------------------- */
+
+.fr-search {
+	width: 100%;
+	max-width: 520px;
+	min-height: 40px;
+	padding: 0 12px;
+	margin-bottom: 16px;
+	font-size: 14px;
+	color: var(--fr-ink);
+	background: var(--fr-bg);
+	border: 2px solid var(--fr-green);
+	border-radius: 8px;
+}
+
+/* --- tables -------------------------------------------------------------- */
+
+.fr-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 20px;
+	/* Wide content scrolls inside itself rather than pushing the page sideways. */
+	display: table;
+}
+
+.fr-table th {
+	text-align: left;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+	color: var(--fr-muted);
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--fr-line);
+	white-space: nowrap;
+}
+
+.fr-table td {
+	padding: 10px;
+	border-bottom: 1px solid var(--fr-line);
+	vertical-align: middle;
+}
+
+.fr-right {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.fr-muted {
+	font-size: 12px;
+	color: var(--fr-muted);
+}
+
+.fr-pick {
+	cursor: pointer;
+	transition: background 150ms ease-out;
+}
+
+.fr-pick:hover {
+	background: var(--fr-tint);
+}
+
+/* A scanned row lights up briefly. Without it, a scan that stepped a quantity
+ * on a twenty-line order is invisible. */
+.fr-lines tr.fr-hit {
+	background: var(--fr-tint);
+	transition: background 120ms ease-out;
+}
+
+.fr-qty,
+.fr-lot {
+	width: 90px;
+	height: 34px;
+	padding: 0 8px;
+	font-size: 14px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--fr-ink);
+	background: var(--fr-bg);
+	border: 1px solid var(--fr-line);
+	border-radius: 6px;
+}
+
+.fr-lot {
+	width: 120px;
+	text-align: left;
+}
+
+.fr-qty:focus,
+.fr-lot:focus {
+	border-color: var(--fr-green);
+}
+
+.fr-qty:disabled {
+	background: var(--fr-sunken);
+	cursor: not-allowed;
+}
+
+/* --- finish bar ---------------------------------------------------------- */
+
+.fr-finish {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: 16px;
+	padding: 16px;
+	background: var(--fr-sunken);
+	border-radius: 10px;
+}
+
+.fr-field {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fr-muted);
+}
+
+.fr-field input {
+	display: block;
+	min-width: 220px;
+	height: 38px;
+	margin-top: 4px;
+	padding: 0 10px;
+	font-size: 14px;
+	color: var(--fr-ink);
+	background: var(--fr-bg);
+	border: 1px solid var(--fr-line);
+	border-radius: 8px;
+}
+
+.fr-record {
+	min-height: 40px;
+	padding: 0 20px;
+	font-size: 15px;
+	font-weight: 700;
+	color: #FFFFFF;
+	background: var(--fr-green);
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background 150ms ease-out;
+}
+
+.fr-record:hover {
+	background: var(--fr-green-dark);
+}
+
+.fr-secondary {
+	min-height: 40px;
+	padding: 0 20px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fr-ink);
+	background: var(--fr-bg);
+	border: 1px solid var(--fr-line);
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+/* --- empty / done -------------------------------------------------------- */
+
+.fr-empty {
+	padding: 24px;
+	text-align: center;
+	color: var(--fr-muted);
+	background: var(--fr-sunken);
+	border-radius: 10px;
+}
+
+.fr-done {
+	padding: 32px;
+	margin-bottom: 16px;
+	text-align: center;
+	background: var(--fr-tint);
+	border: 2px solid var(--fr-green);
+	border-radius: 12px;
+}
+
+.fr-done-title {
+	font-size: 20px;
+	font-weight: 700;
+}
+
+.fr-done-ref {
+	margin-top: 6px;
+	font-size: 15px;
+	font-variant-numeric: tabular-nums;
+}

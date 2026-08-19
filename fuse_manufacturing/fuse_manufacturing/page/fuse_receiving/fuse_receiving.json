@@ -1,0 +1,19 @@
+{
+ "creation": "2026-08-18 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "fuse-receiving",
+ "owner": "Administrator",
+ "page_name": "fuse-receiving",
+ "restrict_to_domain": "",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Receiving"
+}

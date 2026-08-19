@@ -29,13 +29,18 @@ doc_events = {
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
 	},
-	# Goods are received in Intacct. Purchase orders are mirrored here read-only so stock
-	# on order reaches projections and demand reporting — receipting them here would add
-	# stock Intacct never saw, and receipting the same delivery in Intacct would then count
-	# it twice. Blocked at validate, so it fails before anything is written.
+	# Goods ARE received here, as of 2026-08-18. The receipt posts to Intacct as a PO
+	# Receiver converted from the mirrored order, so the delivery is recorded once and
+	# both systems see the same stock. The earlier blanket refusal was removed together
+	# with the posting that replaces it — never one without the other, because a receipt
+	# that submits without posting adds stock Intacct never saw.
 	"Purchase Receipt": {
-		"validate": "fuse_manufacturing.postings.block_goods_receipt",
+		"on_submit": "fuse_manufacturing.postings.on_purchase_receipt_submit",
+		"on_cancel": "fuse_manufacturing.postings.on_purchase_receipt_cancel",
 	},
+	# Subcontracting is NOT receiving and has no posting behind it, so it stays refused.
+	# Removing this alongside the block above would have opened a second door onto the
+	# same divergence.
 	"Subcontracting Receipt": {
 		"validate": "fuse_manufacturing.postings.block_goods_receipt",
 	},

@@ -16,14 +16,14 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.3.0-2026-08-18';
+	var BUILD_MARKER = 'v0.6.0-2026-08-18-receiving';
 	console.log('Fuse Shop Floor loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-floor-stylesheet')) {
 		var link = document.createElement('link');
 		link.id = 'fuse-floor-stylesheet';
 		link.rel = 'stylesheet';
-		link.href = '/assets/fuse_manufacturing/css/fuse_floor.css';
+		link.href = '/assets/fuse_manufacturing/css/fuse_floor.css?v=' + encodeURIComponent(BUILD_MARKER);
 		document.head.appendChild(link);
 	}
 
@@ -84,7 +84,8 @@ var FF_ICONS = {
 	transfer: 'M8 3L4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4',
 	tick: 'M20 6L9 17l-5-5',
 	remove: 'M18 6L6 18M6 6l12 12',
-	warn: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01'
+	warn: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
+	receive: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'
 };
 
 function ff_icon(name) {
@@ -201,6 +202,7 @@ FuseFloor.prototype.home = function () {
 		ff_tile('run', 'orders', 'Works Orders', 'Record what you made against a works order'),
 		ff_tile('wip', 'wip', 'Issue to WIP', 'Move components from a store onto the floor'),
 		ff_tile('move', 'transfer', 'Item Transfer', 'Warehouse to warehouse'),
+		ff_tile('receive', 'receive', 'Receiving', 'Book a delivery in against a purchase order'),
 		'</div>'
 	].join('\n'));
 
@@ -208,6 +210,7 @@ FuseFloor.prototype.home = function () {
 		var go = $(this).data('go');
 		if (go === 'run') self.work_orders();
 		else if (go === 'wip') self.transfer(FF_WIP);
+		else if (go === 'receive') self.receiving();
 		else self.transfer(FF_MOVE);
 	});
 };
@@ -734,5 +737,412 @@ FuseFloor.prototype.done = function (result, message) {
 	});
 	this.$root.find('[data-open]').on('click', function () {
 		frappe.set_route('Form', 'Stock Entry', result.stock_entry);
+	});
+};
+
+
+// ---------------------------------------------------------------------------
+// Receiving — book a delivery in against a purchase order
+//
+// Orders are never created here; they are mirrored from Intacct. This records
+// what turned up. Submitting posts a PO Receiver to Intacct first, so a rejection
+// there means nothing is booked in here either.
+// ---------------------------------------------------------------------------
+
+FuseFloor.prototype.receiving = function (term) {
+	var self = this;
+	this.receipt = [];
+
+	frappe.call({
+		method: 'fuse_manufacturing.receiving.open_orders',
+		args: { term: term || '' },
+		freeze: true,
+		freeze_message: 'Loading orders',
+		callback: function (r) {
+			var orders = (r && r.message) || [];
+
+			var html = [
+				self.header_html('Receiving', 'Deliveries against a purchase order'),
+				ff_step(1, 3, 'Find the order'),
+				'<div class="ff-scan">',
+				ff_icon('scan'),
+				'  <input class="ff-input" data-scan="1" placeholder="Scan or type an order number" ',
+				'         autocomplete="off" autocapitalize="off" spellcheck="false" value="' + ff_escape(term || '') + '">',
+				'</div>'
+			];
+
+			if (!orders.length) {
+				html.push(
+					'<div class="ff-empty">' +
+					(term ? 'No open order matches “' + ff_escape(term) + '”.' : 'No orders are waiting for delivery.') +
+					'</div>'
+				);
+			} else {
+				html.push('<div class="ff-list">');
+				orders.forEach(function (order) {
+					html.push(
+						'<button class="ff-row" data-order="' + ff_escape(order.name) + '">' +
+						'  <span class="ff-row-main">' + ff_escape(order.intacct_po || order.custom_intacct_po_id || order.name) + '</span>' +
+						'  <span class="ff-row-sub">' + ff_escape(order.supplier_name || order.supplier) + '</span>' +
+						'  <span class="ff-row-qty">' + ff_qty(order.per_received) + '%<br>in</span>' +
+						'</button>'
+					);
+				});
+				html.push('</div>');
+			}
+
+			self.render(html.join('\n'));
+			self.bind_back();
+
+			// Searching the list and scanning the order number are the same action, so
+			// they are the same box. Enter searches; an exact match opens straight away.
+			self.$root.find('[data-scan]').on('keydown', function (e) {
+				if (e.which !== 13) return;
+				e.preventDefault();
+
+				var typed = ($(this).val() || '').trim();
+				var hit = null;
+				orders.forEach(function (order) {
+					var ours = (order.name || '').toLowerCase();
+					var theirs = (order.custom_intacct_po_id || '').toLowerCase();
+					if (ours === typed.toLowerCase() || theirs === typed.toLowerCase()) hit = order;
+				});
+
+				if (hit) {
+					self.receive_order(hit.name);
+					return;
+				}
+				self.receiving(typed);
+			});
+
+			self.$root.find('[data-order]').on('click', function () {
+				self.receive_order($(this).data('order'));
+			});
+		}
+	});
+};
+
+FuseFloor.prototype.receive_order = function (purchase_order) {
+	var self = this;
+
+	frappe.call({
+		method: 'fuse_manufacturing.receiving.order_lines',
+		args: { purchase_order: purchase_order },
+		freeze: true,
+		freeze_message: 'Opening the order',
+		callback: function (r) {
+			if (!r || !r.message) return;
+			self.order = r.message;
+			self.receipt = [];
+			self.paint_receiving();
+		}
+	});
+};
+
+FuseFloor.prototype.paint_receiving = function () {
+	var self = this;
+	var order = this.order;
+
+	var html = [
+		this.header_html('Receiving', (order.intacct_po || order.purchase_order) + ' · ' + (order.supplier_name || order.supplier)),
+		ff_step(2, 3, 'Book the goods in'),
+		'<div class="ff-scan">',
+		ff_icon('scan'),
+		'  <input class="ff-input" data-scan="1" placeholder="Scan an item on this order" ',
+		'         autocomplete="off" autocapitalize="off" spellcheck="false">',
+		'</div>',
+		'<div class="ff-list">'
+	];
+
+	order.lines.forEach(function (line) {
+		var booked = self.booked_for(line.purchase_order_item);
+		var left = flt(line.outstanding_qty) - booked;
+		html.push(
+			'<button class="ff-row" data-line="' + ff_escape(line.purchase_order_item) + '">' +
+			'  <span class="ff-row-main">' + ff_escape(line.item_code) + '</span>' +
+			'  <span class="ff-row-sub">' + ff_escape(line.item_name || '') +
+			(booked ? ' · <b>' + ff_qty(booked) + ' booked</b>' : '') + '</span>' +
+			'  <span class="ff-row-qty">' + ff_qty(left) + '<br>' + ff_escape(line.uom) + '</span>' +
+			'</button>'
+		);
+	});
+
+	html.push('</div>');
+	html.push(
+		'<div class="ff-actions">',
+		'  <button class="ff-submit" data-submit="1"' + (this.receipt.length ? '' : ' disabled') + '>' +
+		(this.receipt.length
+			? 'Finish ' + this.receipt.length + (this.receipt.length === 1 ? ' line' : ' lines')
+			: 'Nothing booked yet') +
+		'</button>',
+		'</div>'
+	);
+
+	this.render(html.join('\n'));
+	this.bind_back(function () {
+		self.receiving();
+	});
+
+	this.$root.find('[data-line]').on('click', function () {
+		self.ask_receive($(this).data('line'));
+	});
+
+	this.$root.find('[data-scan]').on('keydown', function (e) {
+		if (e.which !== 13) return;
+		e.preventDefault();
+		self.scan_into_receipt($(this).val());
+		$(this).val('');
+	});
+
+	this.$root.find('[data-submit]').on('click', function () {
+		if (self.receipt.length) self.finish_receipt();
+	});
+
+	this.focus_scan();
+};
+
+// How much is already booked against an ordered line in this session.
+FuseFloor.prototype.booked_for = function (po_item) {
+	var total = 0;
+	(this.receipt || []).forEach(function (row) {
+		if (row.purchase_order_item === po_item) total += flt(row.qty) + flt(row.rejected_qty);
+	});
+	return total;
+};
+
+FuseFloor.prototype.line_by_id = function (po_item) {
+	var found = null;
+	this.order.lines.forEach(function (line) {
+		if (line.purchase_order_item === po_item) found = line;
+	});
+	return found;
+};
+
+FuseFloor.prototype.scan_into_receipt = function (term) {
+	var self = this;
+	term = (term || '').trim();
+	if (!term) return;
+
+	frappe.call({
+		method: 'fuse_manufacturing.receiving.scan',
+		args: { purchase_order: this.order.purchase_order, term: term },
+		freeze: true,
+		freeze_message: 'Reading ' + term,
+		callback: function (r) {
+			var result = (r && r.message) || {};
+			var scanned = result.scan || {};
+
+			// Anything that is not an item is reported for what it was, rather than
+			// as "not found" — scanning a pallet label at the wrong moment is a normal
+			// mistake and the operator should be told what they actually scanned.
+			if (scanned.type !== 'item') {
+				frappe.msgprint(scanned.label || 'That is not an item on this order.');
+				self.focus_scan();
+				return;
+			}
+
+			if (!result.lines || !result.lines.length) {
+				frappe.msgprint(result.message || 'That item is not on this order.');
+				self.focus_scan();
+				return;
+			}
+
+			// One ordered line is the normal case. Several means the same item was
+			// ordered twice, and only the operator knows which delivery this is.
+			if (result.lines.length === 1) {
+				self.ask_receive(result.lines[0].name);
+				return;
+			}
+			self.choose_line(result.lines);
+		}
+	});
+};
+
+FuseFloor.prototype.choose_line = function (lines) {
+	var self = this;
+	var dialog = new frappe.ui.Dialog({ title: 'Which line?' });
+	var $body = $(dialog.body).empty();
+
+	lines.forEach(function (line) {
+		var $row = $(
+			'<button type="button" class="ff-row ff-row-choice">' +
+			'  <span class="ff-row-main"></span>' +
+			'  <span class="ff-row-sub"></span>' +
+			'</button>'
+		);
+		$row.find('.ff-row-main').text('Line ' + line.idx + ' · ' + line.item_code);
+		$row.find('.ff-row-sub').text(
+			ff_qty(line.outstanding_qty) + ' ' + (line.stock_uom || '') + ' outstanding · ' + (line.warehouse || '')
+		);
+		$row.on('click', function () {
+			dialog.hide();
+			self.ask_receive(line.name);
+		});
+		$body.append($row);
+	});
+
+	dialog.show();
+};
+
+FuseFloor.prototype.ask_receive = function (po_item) {
+	var self = this;
+	var line = this.line_by_id(po_item);
+	if (!line) {
+		frappe.msgprint('That line is not on this order.');
+		return;
+	}
+
+	var booked = this.booked_for(po_item);
+	var left = flt(line.outstanding_qty) - booked;
+
+	var fields = [
+		{
+			fieldname: 'summary',
+			fieldtype: 'HTML',
+			options: [
+				'<div class="ff-onhand">',
+				ff_escape(line.item_name || ''),
+				'<br>Ordered <b>' + ff_qty(line.ordered_qty) + '</b>,',
+				' received <b>' + ff_qty(line.received_qty) + '</b>,',
+				' <b>' + ff_qty(left) + ' ' + ff_escape(line.uom) + '</b> outstanding.',
+				'</div>'
+			].join('')
+		},
+		{
+			fieldname: 'qty',
+			fieldtype: 'Float',
+			label: 'Accepted (' + line.uom + ')',
+			default: left > 0 ? left : 0,
+			reqd: 1
+		},
+		{
+			fieldname: 'rejected_qty',
+			fieldtype: 'Float',
+			label: 'Rejected (' + line.uom + ')',
+			default: 0,
+			description: self.order.reject_warehouse
+				? 'Goes to ' + self.order.reject_warehouse
+				: 'No rejects warehouse is set, so a rejected quantity will be refused.'
+		}
+	];
+
+	// Only where Intacct tracks lots on this item. Asking otherwise invites a number
+	// that Intacct then rejects the whole receipt for.
+	if (line.lot_tracked) {
+		fields.push({
+			fieldname: 'lot',
+			fieldtype: 'Data',
+			label: 'Lot number',
+			reqd: 1
+		});
+	}
+
+	var dialog = new frappe.ui.Dialog({
+		title: line.item_code,
+		fields: fields,
+		primary_action_label: 'Book in',
+		primary_action: function (values) {
+			var accepted = flt(values.qty);
+			var rejected = flt(values.rejected_qty);
+
+			if (accepted <= 0 && rejected <= 0) {
+				frappe.msgprint('Enter what arrived.');
+				return;
+			}
+			if (rejected > 0 && !self.order.reject_warehouse) {
+				frappe.msgprint('No receiving rejects warehouse is set, so rejected stock cannot be booked in.');
+				return;
+			}
+
+			dialog.hide();
+			self.receipt.push({
+				purchase_order_item: po_item,
+				item_code: line.item_code,
+				qty: accepted,
+				rejected_qty: rejected,
+				warehouse: line.warehouse,
+				lot: values.lot || null
+			});
+			self.paint_receiving();
+		}
+	});
+
+	dialog.show();
+	setTimeout(function () {
+		dialog.get_field('qty').$input.focus().select();
+	}, 150);
+};
+
+FuseFloor.prototype.finish_receipt = function (confirmed) {
+	var self = this;
+
+	var dialog = new frappe.ui.Dialog({
+		title: 'Finish the delivery',
+		fields: [
+			{
+				fieldname: 'supplier_delivery_note',
+				fieldtype: 'Data',
+				label: 'Supplier delivery note / invoice',
+				description: 'The number on the paperwork. Carried to Intacct on the receiver.'
+			},
+			{
+				fieldname: 'posting_date',
+				fieldtype: 'Date',
+				label: 'Received on',
+				default: frappe.datetime.get_today(),
+				reqd: 1
+			}
+		],
+		primary_action_label: 'Record',
+		primary_action: function (values) {
+			dialog.hide();
+			self.send_receipt(values, false);
+		}
+	});
+
+	dialog.show();
+};
+
+FuseFloor.prototype.send_receipt = function (values, confirmed) {
+	var self = this;
+
+	frappe.call({
+		method: 'fuse_manufacturing.receiving.submit_receipt',
+		args: {
+			purchase_order: this.order.purchase_order,
+			rows: JSON.stringify(this.receipt),
+			supplier_delivery_note: values.supplier_delivery_note || '',
+			posting_date: values.posting_date,
+			confirm_over_receipt: confirmed ? 1 : 0
+		},
+		freeze: true,
+		freeze_message: 'Sending to Intacct…',
+		callback: function (r) {
+			var result = (r && r.message) || {};
+
+			// More arrived than was ordered. Nothing has been written — the operator
+			// is told which line and by how much, and decides.
+			if (result.confirm_required === 'over_receipt') {
+				var lines = (result.over || []).map(function (row) {
+					return row.item_code + ': ' + ff_qty(row.receiving_qty) +
+						' against ' + ff_qty(row.outstanding_qty) + ' outstanding' +
+						' (' + ff_qty(row.excess_qty) + ' over)';
+				});
+				frappe.confirm(
+					'More is being booked in than this order expects:<br><br><b>' +
+					lines.join('<br>') + '</b><br><br>Record it anyway?',
+					function () {
+						self.send_receipt(values, true);
+					}
+				);
+				return;
+			}
+
+			if (!result.purchase_receipt) return;
+			self.done(
+				{ stock_entry: result.purchase_receipt, intacct_key: result.intacct_key },
+				'Delivery booked in.'
+			);
+		}
 	});
 };

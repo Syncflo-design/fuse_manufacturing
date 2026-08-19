@@ -546,10 +546,58 @@ def sync_uoms():
 # ──────────────────────────────────────────────────────────────────────────────
 
 PO_LINE_FIELDS = [
+	# RECORDNO is the PODOCUMENTENTRY key. A PO Receiver converts line-by-line against it
+	# (SOURCELINEKEY), so without it a receipt has nothing to attach to and Intacct cannot
+	# tell which ordered line was delivered. Item code is NOT a substitute — the same item
+	# can appear on an order twice.
+	"RECORDNO",
 	"DOCHDRID", "DOCPARID", "LINE_NO", "ITEMID", "UNIT", "QTY_REMAINING",
 	"WAREHOUSE.LOCATION_NO", "VENDORID", "PRICE",
 ]
 PO_HEADER_FIELDS = ["DOCID", "WHENCREATED", "WHENDUE", "CURRENCY", "STATE"]
+
+
+@frappe.whitelist()
+def list_purchasing_definitions(company=None):
+	"""Every PURCHASING transaction definition this Intacct company has.
+
+	`list_transaction_definitions` reads INVDOCUMENTPARAMS — inventory only. Receiving
+	converts a purchase order into a PO Receiver, and both of those live in
+	PODOCUMENTPARAMS, so neither is visible there.
+
+	Read before building the receipt posting: the definition name must match character
+	for character, and a definition with no numbering scheme is rejected with
+	PL01000127 "Document Number is missing" — an error that says nothing about numbering
+	and sends you looking at the line items.
+
+	The richer field set is attempted first and falls back to the three fields
+	`_order_templates` already proves this object accepts, so an unknown field name
+	returns a shorter answer rather than nothing at all.
+	"""
+	wanted = [
+		"RECORDNO", "DOCID", "DESCRIPTION", "DOCCLASS", "STATUS",
+		"ENABLE_SEQNUM", "SEQUENCE", "UPDATES_INV", "CREATETYPE",
+	]
+	try:
+		rows = gateway.query("PODOCUMENTPARAMS", wanted, company=company)
+		fields = wanted
+	except Exception:
+		fields = ["DOCID", "DOCCLASS", "STATUS"]
+		rows = gateway.query("PODOCUMENTPARAMS", fields, company=company)
+
+	definitions = [{field.lower(): val(row, field) for field in fields} for row in rows]
+	definitions.sort(key=lambda d: (d.get("docid") or "").lower())
+
+	# The receiving build depends on this one existing and being postable.
+	receiver = [d for d in definitions if (d.get("docid") or "").lower() == "po receiver-inventory"]
+
+	return {
+		"fields_read": fields,
+		"count": len(definitions),
+		"definitions": definitions,
+		"po_receiver_inventory": receiver[0] if receiver else None,
+		"receiver_found": bool(receiver),
+	}
 
 
 def _order_templates(company=None):
@@ -626,6 +674,10 @@ def sync_purchase_orders(company=None):
 				"uom": frappe.db.get_value("Item", item_code, "stock_uom"),
 				"warehouse": warehouse,
 				"rate": float(val(row, "PRICE") or 0),
+				# Carried so a goods receipt can convert this exact ordered line.
+				# Not part of the change signature — it never changes for a given line,
+				# and including it would not affect the rebuild decision either way.
+				"custom_intacct_line_recordno": val(row, "RECORDNO"),
 				"schedule_date": None,  # filled from the header below
 			}
 		)
@@ -636,7 +688,7 @@ def sync_purchase_orders(company=None):
 			if val(row, "DOCID") in orders:
 				headers[val(row, "DOCID")] = row
 
-	created = updated = closed = unchanged = 0
+	created = updated = closed = unchanged = received = 0
 
 	for doc_id, order in orders.items():
 		header = headers.get(doc_id)
@@ -670,9 +722,28 @@ def sync_purchase_orders(company=None):
 				unchanged += 1
 				continue
 
-			# Quantities moved. There is no receipt history here to preserve — nothing is
-			# ever received in ERPNext — so cancelling and rebuilding is simpler and always
-			# correct, where editing a submitted order in place is neither.
+			# Quantities moved in Intacct. Rebuilding is the simplest correct answer for an
+			# order nothing has been received against — but NOT once it has receipts.
+			#
+			# This used to cancel unconditionally, on the stated grounds that nothing is ever
+			# received in ERPNext. That stopped being true on 2026-08-18. Cancelling an order
+			# with a submitted receipt against it would either be refused by ERPNext or tear
+			# up the link between a delivery and what it was delivered against, and the stock
+			# has already posted to Intacct either way.
+			#
+			# Reported, not guessed at: which of the two versions is right depends on what
+			# actually arrived, and only a person knows that.
+			if frappe.db.exists(
+				"Purchase Receipt Item",
+				{"purchase_order": existing, "docstatus": 1},
+			):
+				problems.append(
+					f"{doc_id}: changed in Intacct, but {existing} already has goods received "
+					"against it — left alone. Reconcile it by hand."
+				)
+				received += 1
+				continue
+
 			current.cancel()
 			updated += 1
 		else:
@@ -720,6 +791,7 @@ def sync_purchase_orders(company=None):
 		"created": created,
 		"rebuilt": updated,
 		"unchanged": unchanged,
+		"held_for_receipts": received,
 		"closed": closed,
 		"problems": problems,
 	}
@@ -1080,6 +1152,7 @@ def sync_items(modified_since=None):
 		doc.custom_intacct_item_id = item_code
 		doc.custom_intacct_recordno = val(row, "RECORDNO")
 		doc.custom_intacct_bin_tracked = 1 if flag(row, "ENABLE_BINS") else 0
+		doc.custom_intacct_lot_tracked = 1 if flag(row, "ENABLE_LOT_CATEGORY") else 0
 
 		# 2,566 items rewritten hourly is 2,566 Version records an hour for nothing.
 		if doc.is_new() or _has_changes(doc):

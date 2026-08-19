@@ -49,6 +49,14 @@ CUSTOM_FIELDS = {
 			"read_only": 1,
 			"description": "ENABLE_BINS on the Intacct item. A movement of a bin-enabled item is rejected unless it carries a bin.",
 		},
+		{
+			"fieldname": "custom_intacct_lot_tracked",
+			"fieldtype": "Check",
+			"label": "Intacct Lot Tracked",
+			"insert_after": "custom_intacct_bin_tracked",
+			"read_only": 1,
+			"description": "ENABLE_LOT_CATEGORY on the Intacct item. Receiving asks for a lot number only where this is set — sending a lot for an item Intacct does not track is rejected with BL03001974.",
+		},
 	],
 	"Warehouse": [
 		{
@@ -151,6 +159,52 @@ CUSTOM_FIELDS = {
 			"insert_after": "custom_intacct_reversal_key",
 			"read_only": 1,
 			"allow_on_submit": 1,
+		},
+	],
+	"Purchase Receipt": [
+		{
+			"fieldname": "custom_intacct_section",
+			"fieldtype": "Section Break",
+			"label": "Intacct",
+			"insert_after": "posting_time",
+			"collapsible": 1,
+		},
+		{
+			"fieldname": "custom_intacct_key",
+			"fieldtype": "Data",
+			"label": "Intacct Key",
+			"insert_after": "custom_intacct_section",
+			"read_only": 1,
+			"allow_on_submit": 1,
+			"description": "Key of the PO Receiver this receipt created in Intacct. Its presence is what blocks a cancel here — undoing a receiver is a reverse conversion in Intacct, which Fuse does not post yet.",
+		},
+		{
+			"fieldname": "custom_intacct_posted_on",
+			"fieldtype": "Datetime",
+			"label": "Posted to Intacct",
+			"insert_after": "custom_intacct_key",
+			"read_only": 1,
+			"allow_on_submit": 1,
+		},
+	],
+	"Purchase Receipt Item": [
+		{
+			"fieldname": "custom_intacct_lot",
+			"fieldtype": "Data",
+			"label": "Lot",
+			"insert_after": "rejected_warehouse",
+			"description": "Intacct's lot number for the stock on this line, where the item is lot-tracked. Sending a lot for an item Intacct does not track is rejected with BL03001974, so it is only ever sent where the item carries one.",
+		},
+	],
+	"Purchase Order Item": [
+		{
+			"fieldname": "custom_intacct_line_recordno",
+			"fieldtype": "Data",
+			"label": "Intacct Line",
+			"insert_after": "item_code",
+			"read_only": 1,
+			"allow_on_submit": 1,
+			"description": "PODOCUMENTENTRY.RECORDNO of the Intacct order line this mirrors. A goods receipt converts against this key, so a line without it cannot be received.",
 		},
 	],
 	"Purchase Order": [

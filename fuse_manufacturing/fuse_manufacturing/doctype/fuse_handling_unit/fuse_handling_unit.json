@@ -1,0 +1,235 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-18 00:00:00.000000",
+ "description": "A barcoded handling unit — a pallet, case, box or tote. One physical thing you can scan, holding one or more items. Fuse creates these; Intacct has no equivalent object, so the number is ours.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "unit_type",
+  "status",
+  "column_break_id",
+  "barcode",
+  "parent_unit",
+  "company",
+  "location_section",
+  "warehouse",
+  "bin",
+  "contents_section",
+  "items",
+  "source_section",
+  "source_doctype",
+  "source_name",
+  "column_break_source",
+  "supplier",
+  "received_on",
+  "label_section",
+  "label_printed_on",
+  "label_print_count",
+  "column_break_label",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "HU-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "no_copy": 1,
+   "options": "HU-.YYYY.-",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "default": "Pallet",
+   "fieldname": "unit_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Pallet\nCase\nBox\nTote\nOther",
+   "reqd": 1,
+   "description": "What the physical thing is. The behaviour is identical for all of them — this is for labelling and reporting."
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nClosed\nConsumed\nCancelled",
+   "reqd": 1,
+   "description": "Open while it is still being built. Closed once sealed and labelled. Consumed when it has been broken down or issued."
+  },
+  {
+   "fieldname": "column_break_id",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "barcode",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Barcode",
+   "unique": 1,
+   "description": "What is printed on the label and what a scanner reads. Defaults to this unit's own number, but holds a supplier's label instead when goods arrive already barcoded — which is why it is a separate field and not just the name."
+  },
+  {
+   "fieldname": "parent_unit",
+   "fieldtype": "Link",
+   "label": "On Handling Unit",
+   "options": "Fuse Handling Unit",
+   "description": "The unit this one sits on — cases on a pallet. Empty for a top-level unit."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Where It Is"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "bin",
+   "fieldtype": "Link",
+   "label": "Bin",
+   "options": "Intacct Bin",
+   "description": "Bins are Intacct's, mirrored read-only. A handling unit sits in one; it never defines one."
+  },
+  {
+   "fieldname": "contents_section",
+   "fieldtype": "Section Break",
+   "label": "What Is On It"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Contents",
+   "options": "Fuse Handling Unit Item",
+   "description": "A table, not a single item: mixed pallets are ordinary in a warehouse, and discovering that after the fact would mean rebuilding every document that points here."
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Where It Came From"
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source Type",
+   "options": "DocType",
+   "read_only": 1,
+   "description": "Generic on purpose. Receiving builds these first, but production and picking will too."
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Document",
+   "options": "source_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "label": "Built On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "label_section",
+   "fieldtype": "Section Break",
+   "label": "Label"
+  },
+  {
+   "fieldname": "label_printed_on",
+   "fieldtype": "Datetime",
+   "label": "Last Printed",
+   "read_only": 1,
+   "description": "Printing is not built yet. These two fields exist so that when it is, a reprint is distinguishable from a first print without a schema change."
+  },
+  {
+   "fieldname": "label_print_count",
+   "fieldtype": "Int",
+   "label": "Times Printed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_label",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse Handling Unit",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "write": 1
+  }
+ ],
+ "search_fields": "barcode,unit_type,warehouse",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "barcode",
+ "track_changes": 1
+}

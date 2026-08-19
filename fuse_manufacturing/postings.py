@@ -12,6 +12,7 @@ same code — and so it can be run once, deliberately, and checked in Intacct.
 import xml.etree.ElementTree as ET
 
 import frappe
+from frappe.utils import flt
 
 from fuse_manufacturing import gateway, rules
 
@@ -623,3 +624,243 @@ def _default_bin(warehouse, item_code):
 	if not warehouse or not frappe.db.get_value("Item", item_code, "custom_intacct_bin_tracked"):
 		return None
 	return frappe.db.get_value("Warehouse", warehouse, "custom_intacct_default_bin")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Goods receipt — a PO Receiver, converted from the purchase order
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Intacct's receiving definition. A receipt is not a fresh document: it CONVERTS the
+# purchase order, which is what moves that order to Partially Converted / Converted —
+# the states the order sync reads to decide what is still outstanding.
+PO_RECEIVER = "PO Receiver-Inventory"
+
+
+def build_potransaction_xml(*, definition, posting_date, created_from, vendor_id, lines,
+                            location_id, reference_no=None, vendor_doc_no=None,
+                            document_no=None):
+	"""A <create_potransaction> function element for a goods receipt.
+
+	Element order follows Intacct's own documented sequence. This is a legacy
+	DTD-validated function, so order is not cosmetic — a correct element in the wrong
+	place is rejected as a missing one.
+
+	`created_from` is the source order's full document id ("Purchase Order-Inventory-PO0051")
+	and each line carries `sourcelinekey`, the ordered line's RECORDNO. The header link
+	alone is not enough: without the line key Intacct cannot tell which ordered line was
+	delivered, and the same item can legitimately appear on an order twice.
+	"""
+	function = ET.Element("function")
+	transaction = ET.SubElement(function, "create_potransaction")
+
+	_text(transaction, "transactiontype", definition)
+
+	date = ET.SubElement(transaction, "datecreated")
+	_text(date, "year", posting_date.year)
+	_text(date, "month", posting_date.month)
+	_text(date, "day", posting_date.day)
+
+	_text(transaction, "createdfrom", created_from)
+	_text(transaction, "vendorid", vendor_id)
+
+	if document_no:
+		_text(transaction, "documentno", document_no)
+	if reference_no:
+		_text(transaction, "referenceno", reference_no)
+	# The supplier's own delivery note or invoice number. That is the number the people in
+	# the warehouse and the people in accounts both quote, so it is worth carrying.
+	if vendor_doc_no:
+		_text(transaction, "vendordocno", vendor_doc_no)
+
+	items = ET.SubElement(transaction, "potransitems")
+	for line in lines:
+		item = ET.SubElement(items, "potransitem")
+		_text(item, "itemid", line["item_id"])
+		_text(item, "warehouseid", line["warehouse_id"])
+		_text(item, "quantity", line["quantity"])
+		_text(item, "unit", line["unit"])
+		_text(item, "sourcelinekey", line["source_line_key"])
+		_text(item, "locationid", location_id)
+
+		if line.get("bin") or line.get("lot"):
+			details = ET.SubElement(item, "itemdetails")
+			detail = ET.SubElement(details, "itemdetail")
+			_text(detail, "quantity", line["quantity"])
+			if line.get("lot"):
+				_text(detail, "lotno", line["lot"])
+			if line.get("bin"):
+				_text(detail, "bin", line["bin"])
+
+	return function
+
+
+def _receipt_lines(doc):
+	"""The receiver lines for a Purchase Receipt: accepted and rejected, separately.
+
+	Rejected stock was still delivered and will still be invoiced, so it belongs on the
+	receiver — it just lands somewhere else. Two lines against the same ordered line is
+	how the donor did it, and it is the only way to say "18 good, 2 damaged" without
+	losing one of the numbers.
+	"""
+	lines = []
+	for row in doc.items:
+		if not row.purchase_order_item:
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}) is not linked to a purchase order line. "
+				"A receipt converts an ordered line, so a free-standing row has nothing to "
+				"convert against."
+			)
+
+		source_line_key = frappe.db.get_value(
+			"Purchase Order Item", row.purchase_order_item, "custom_intacct_line_recordno"
+		)
+		if not source_line_key:
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}): the ordered line carries no Intacct line "
+				"key. Re-run the purchase order sync so the mirror picks it up, then receive "
+				"again."
+			)
+
+		unit = frappe.db.get_value("Item", row.item_code, "stock_uom")
+		lot = row.get("custom_intacct_lot") or None
+
+		if flt(row.qty) > 0:
+			lines.append(
+				{
+					"item_id": row.item_code,
+					"warehouse_id": _intacct_warehouse(row.warehouse),
+					"quantity": flt(row.qty),
+					"unit": unit,
+					"source_line_key": source_line_key,
+					"bin": _default_bin(row.warehouse, row.item_code),
+					"lot": lot,
+				}
+			)
+
+		if flt(row.get("rejected_qty")) > 0:
+			if not row.rejected_warehouse:
+				frappe.throw(
+					f"Row {row.idx} ({row.item_code}) has a rejected quantity but no reject "
+					"warehouse. Set one on Intacct Settings."
+				)
+			lines.append(
+				{
+					"item_id": row.item_code,
+					"warehouse_id": _intacct_warehouse(row.rejected_warehouse),
+					"quantity": flt(row.rejected_qty),
+					"unit": unit,
+					"source_line_key": source_line_key,
+					"bin": _default_bin(row.rejected_warehouse, row.item_code),
+					"lot": lot,
+				}
+			)
+
+	if not lines:
+		# Intacct rejects an empty receiver with "potransitems: Missing child element",
+		# which reads as a malformed request rather than as an empty one.
+		frappe.throw("Nothing on this receipt has a quantity, so there is nothing to receive.")
+
+	return lines
+
+
+@frappe.whitelist()
+def post_purchase_receipt(purchase_receipt, dry_run=False):
+	"""Post an ERPNext Purchase Receipt to Intacct as a PO Receiver.
+
+	`dry_run=True` returns the XML that WOULD be sent, without sending it, and works on a
+	draft — the point is to read the envelope before the document is committed.
+	"""
+	doc = frappe.get_doc("Purchase Receipt", purchase_receipt)
+
+	if not dry_run and doc.docstatus != 1:
+		frappe.throw(f"{purchase_receipt} is not submitted (docstatus {doc.docstatus}).")
+
+	# ERPNext is happy to receive several purchase orders on one receipt. Intacct is not:
+	# `createdfrom` names a single source document. Refused rather than quietly split into
+	# several receivers, because then one of them failing leaves a receipt half posted.
+	orders = {row.purchase_order for row in doc.items if row.purchase_order}
+	if len(orders) > 1:
+		frappe.throw(
+			"This receipt covers more than one purchase order: "
+			+ ", ".join(sorted(orders))
+			+ ". Intacct receives one order at a time — record a separate receipt for each."
+		)
+	if not orders:
+		frappe.throw("This receipt is not linked to a purchase order, so there is nothing to convert.")
+
+	order = orders.pop()
+	created_from = frappe.db.get_value("Purchase Order", order, "custom_intacct_po_id")
+	if not created_from:
+		frappe.throw(
+			f"{order} is not a mirrored Intacct order. Only orders that came from Intacct can "
+			"be received, because the receipt converts the Intacct document."
+		)
+
+	vendor_id = frappe.db.get_value("Supplier", doc.supplier, "custom_intacct_vendor_id")
+	if not vendor_id:
+		frappe.throw(f"Supplier {doc.supplier} has no Intacct vendor ID — run the suppliers sync.")
+
+	entity = gateway.entity_for_company(doc.company)
+	lines = _receipt_lines(doc)
+
+	function = build_potransaction_xml(
+		definition=PO_RECEIVER,
+		posting_date=doc.posting_date,
+		created_from=created_from,
+		vendor_id=vendor_id,
+		lines=lines,
+		location_id=entity,
+		reference_no=doc.name,
+		vendor_doc_no=doc.get("supplier_delivery_note") or None,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"entity": entity,
+			"created_from": created_from,
+			"lines": lines,
+			"xml": ET.tostring(function, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[function],
+		company=doc.company,
+		reference=("Purchase Receipt", doc.name),
+		purpose="receipt",
+	)
+	return {"posted": True, "intacct_key": keys[0], "lines": len(lines)}
+
+
+def on_purchase_receipt_submit(doc, method=None):
+	"""Post the receipt to Intacct as part of submitting it.
+
+	Same contract as every other movement: Intacct first, inside ERPNext's submit
+	transaction, so a rejection rolls the receipt back and no stock lands here that
+	Intacct has not accepted.
+	"""
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.post_movements:
+		# Deliberately off — a site syncs masters long before it is ready to post.
+		return
+
+	result = post_purchase_receipt(doc.name)
+	doc.db_set("custom_intacct_key", result.get("intacct_key"))
+	doc.db_set("custom_intacct_posted_on", frappe.utils.now_datetime())
+
+
+def on_purchase_receipt_cancel(doc, method=None):
+	"""Refuse to cancel a receipt that has already posted.
+
+	Undoing a PO Receiver means a reverse conversion in Intacct, and how this company's
+	definitions handle one has not been established. Refusing is the honest answer while
+	that is unknown: a local cancel would take stock out of ERPNext that Intacct still
+	believes was delivered, and nobody would find out until a count.
+	"""
+	if not doc.get("custom_intacct_key"):
+		return
+	frappe.throw(
+		f"{doc.name} was received into Intacct (key {doc.custom_intacct_key}) and cannot be "
+		"cancelled here. Reverse the receiver in Intacct first — Fuse does not yet post a "
+		"reverse conversion."
+	)

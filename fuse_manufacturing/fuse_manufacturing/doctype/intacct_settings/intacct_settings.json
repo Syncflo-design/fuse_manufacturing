@@ -18,6 +18,7 @@
   "entity_id",
   "defaults_section",
   "default_item_group",
+  "reject_warehouse",
   "tuning_section",
   "page_size",
   "timeout",
@@ -113,6 +114,13 @@
    "label": "Default Item Group",
    "options": "Item Group",
    "description": "Intacct has no item-group concept that maps onto ERPNext's, so every synced item lands here."
+  },
+  {
+   "fieldname": "reject_warehouse",
+   "fieldtype": "Link",
+   "label": "Receiving Rejects Warehouse",
+   "options": "Warehouse",
+   "description": "Where rejected quantities go when goods are received. Intacct does not record which of its warehouses is the reject one, so this is a Fuse routing choice, not mirrored data — the one thing on this page that is not read from Intacct. The warehouse itself still comes from Intacct like every other. Receiving refuses a rejected quantity while this is empty, rather than quietly putting it back into good stock."
   },
   {
    "fieldname": "tuning_section",
