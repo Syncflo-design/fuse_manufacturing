@@ -21,6 +21,12 @@ after_migrate = "fuse_manufacturing.install.after_install"
 # Intacct posts FIRST: on_submit runs inside ERPNext's submit transaction, so a rejection
 # raises and the ERPNext document does not stand. Gated by "Post Stock Movements" on
 # Intacct Settings — a site syncs masters long before it is ready to post.
+# Client scripts shipped with the app rather than typed into the site, so they survive a
+# rebuild. Both point at the same file: it defines the form behaviour and the list
+# behaviour, and keeping them together means the two cannot drift.
+doctype_js = {"BOM": "public/js/bom_locked.js"}
+doctype_list_js = {"BOM": "public/js/bom_locked.js"}
+
 doc_events = {
 	"Stock Entry": {
 		# Material Receipt and Material Issue are refused: Fuse posts movements, not
@@ -43,6 +49,12 @@ doc_events = {
 		"validate": "fuse_manufacturing.postings.block_inactive_receiving",
 		"on_submit": "fuse_manufacturing.postings.on_purchase_receipt_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_purchase_receipt_cancel",
+	},
+	# Recipes are Intacct kits on a site configured that way, so a BOM built by hand is a
+	# second recipe Intacct has never heard of. Refused at insert; the New button is also
+	# hidden, so nobody meets this message by accident.
+	"BOM": {
+		"before_insert": "fuse_manufacturing.postings.block_bom_creation",
 	},
 	# Subcontracting is NOT receiving and has no posting behind it, so it stays refused.
 	# Removing this alongside the block above would have opened a second door onto the

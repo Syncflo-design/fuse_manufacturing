@@ -1669,6 +1669,9 @@ def stock_drift_report(company=None):
 def sync_kits(company=None, rebuild=False):
 	"""Intacct kits → ERPNext BOMs.
 
+	Does nothing where "Use Intacct Kits as BOMs" is off. That client keeps its recipes
+	in Fuse, and rewriting their BOMs from an empty kit list would delete the lot.
+
 	A kit in Intacct IS the finished good: an ITEM whose ITEMTYPE contains "Kit"
 	("Kit" or "Stockable Kit"), with its recipe in ITEMCOMPONENT.
 
@@ -1685,6 +1688,13 @@ def sync_kits(company=None, rebuild=False):
 	completely alone, because the only way to change a submitted BOM is to cancel and
 	replace it, and doing that on every run would churn the whole BOM history nightly.
 	"""
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.get("use_intacct_kits_as_boms"):
+		# Not this client's model. Returning rather than proceeding matters: the loop
+		# below cancels BOMs whose kit no longer exists, so running it against a client
+		# who has no kits would cancel every BOM they have.
+		return {"skipped": "Use Intacct Kits as BOMs is off"}
+
 	company = company or _target_companies()[0]
 
 	kits = [
@@ -1892,6 +1902,9 @@ def _build_bom(kit_code, lines, company):
 			row["uom"] = line["uom"]
 		doc.append("items", row)
 
+	# The guard that stops anyone hand-building a BOM has to let the sync through, and
+	# the sync is the only thing that may set this.
+	doc.flags.from_intacct_sync = True
 	doc.insert(ignore_permissions=True)
 	doc.submit()
 	return "created"

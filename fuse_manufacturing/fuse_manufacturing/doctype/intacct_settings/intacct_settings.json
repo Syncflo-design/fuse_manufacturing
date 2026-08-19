@@ -20,6 +20,9 @@
   "transaction_mappings",
   "modules_section",
   "active_modules",
+  "recipes_section",
+  "use_intacct_kits_as_boms",
+  "boms_from_intacct",
   "defaults_section",
   "default_item_group",
   "reject_warehouse",
@@ -129,6 +132,26 @@
    "fieldtype": "Table",
    "label": "Modules",
    "options": "Fuse Active Module"
+  },
+  {
+   "fieldname": "recipes_section",
+   "fieldtype": "Section Break",
+   "label": "Recipes",
+   "description": "Where this client's recipes live. The two switches answer different questions: the first is whether Intacct HAS the recipes, the second is whether anyone may keep one here as well."
+  },
+  {
+   "fieldname": "use_intacct_kits_as_boms",
+   "fieldtype": "Check",
+   "default": "1",
+   "label": "Use Intacct Kits as BOMs",
+   "description": "On: every Intacct kit is mirrored here as a BOM on each kit sync, and Intacct's recipe is always restored as the default. Leadertread works this way. Off: the kit sync does nothing and BOMs are whatever exists in Fuse — for a client whose recipes are not in Intacct at all. Switching it off leaves existing BOMs alone; it only stops them being rewritten."
+  },
+  {
+   "fieldname": "boms_from_intacct",
+   "fieldtype": "Check",
+   "default": "1",
+   "label": "Lock BOM Creation in Fuse",
+   "description": "On: the New button is hidden on BOMs and an insert is refused — the kit sync is the only thing that may build one. Off: BOMs can be created here as in stock ERPNext.\n\nNormally on wherever the switch above is on: a hand-built BOM would be a second recipe Intacct has never heard of, and the next sync would quietly make Intacct's the default again."
   },
   {
    "fieldname": "defaults_section",

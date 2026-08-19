@@ -916,3 +916,36 @@ def block_inactive_receiving(doc, method=None):
 		"An administrator can switch it back on under Active Modules in Intacct Settings.",
 		title="Receiving is switched off",
 	)
+
+
+def block_bom_creation(doc, method=None):
+	"""Refuse a hand-built BOM where Intacct owns the recipes.
+
+	Leadertread keeps its recipes as Intacct kits, mirrored here by the kit sync. A BOM
+	made in Fuse would be a second recipe for the same item that Intacct has never heard
+	of — and because the sync restores Intacct's as the default on every run, it would
+	also quietly stop being used without anyone noticing.
+
+	Off by setting for a client whose recipes genuinely live here and nowhere else. The
+	switch is per company, like everything else that differs between them.
+
+	The kit sync sets `from_intacct_sync`, which is the only way past this.
+	"""
+	if doc.flags.get("from_intacct_sync"):
+		return
+	# A mirrored BOM carries the recipe signature the sync wrote. Belt and braces: if the
+	# flag is ever lost in a queued job, this still recognises the sync's own work.
+	if doc.get("custom_intacct_signature"):
+		return
+
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.get("boms_from_intacct"):
+		return
+
+	frappe.throw(
+		"Recipes come from Intacct on this site, so a BOM cannot be created here.\n\n"
+		"Add or change the kit in Intacct and the next kit sync brings it across. An "
+		"administrator can change this under Intacct Settings if recipes should be kept "
+		"in Fuse instead.",
+		title="BOMs come from Intacct",
+	)

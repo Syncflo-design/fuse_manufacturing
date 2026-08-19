@@ -1,6 +1,6 @@
 # Receiving
 
-*Booking a delivery in against a purchase order — Fuse Manufacturing user guide 06*
+*Booking a delivery in against a purchase order — Fuse Manufacturing user guide 07*
 
 ## Before you start
 

@@ -1,7 +1,7 @@
 # Intacct Settings
 
 *The connection to Sage Intacct, and what each part of it controls — Fuse Manufacturing
-administrator guide 09*
+administrator guide 10*
 
 > This guide is for administrators. **Do not share screenshots of this page without
 > blanking the credential fields first.**
