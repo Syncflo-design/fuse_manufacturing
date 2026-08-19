@@ -416,10 +416,21 @@ def after_install():
 	# exist and be in step with the registry first.
 	from fuse_manufacturing import modules, transactions
 
-	modules.sync_modules()
-	# The process rows exist even before anything is mapped, so an admin opening the
-	# settings sees what Fuse needs rather than an empty table that explains nothing.
-	transactions.sync_processes()
+	# Seeding is a convenience: it fills two settings tables so an admin opens the page
+	# and sees what Fuse needs. It is NOT worth a release.
+	#
+	# On 2026-08-19 three deploys in a row silently kept the old code, because this ran
+	# inside after_migrate and anything it raised took the migrate — and therefore the
+	# build — with it. Caught and reported, never raised: a missing row costs one click,
+	# a failed migrate costs the whole release and says nothing about why.
+	seeding = {}
+	for name, seed in (("modules", modules.sync_modules), ("transactions", transactions.sync_processes)):
+		try:
+			seed()
+			seeding[name] = "ok"
+		except Exception as err:
+			frappe.log_error(frappe.get_traceback(), f"Fuse: {name} seeding failed")
+			seeding[name] = f"failed: {err}"
 
 	reports = _apply_role_permissions()
 	frappe.db.commit()
@@ -430,6 +441,7 @@ def after_install():
 		"created_or_updated": created,
 		"role": ROLE,
 		"role_permissions": sorted(ROLE_PERMISSIONS),
+		"seeding": seeding,
 		"active_modules": modules.active_modules(),
 		"unmapped_transactions": transactions.mapping_status()["unmapped"],
 		"reports_granted": reports,

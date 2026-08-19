@@ -84,6 +84,10 @@ def sync_processes():
 		return
 
 	settings = frappe.get_single("Intacct Settings")
+	# Same reasoning as modules.sync_modules: seeding is a convenience and must never be
+	# able to fail a migrate.
+	settings.flags.ignore_mandatory = True
+	settings.flags.ignore_validate = True
 	chosen = {
 		row.process_key: row.definition for row in settings.get("transaction_mappings") or []
 	}

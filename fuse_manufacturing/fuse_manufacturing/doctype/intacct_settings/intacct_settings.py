@@ -20,6 +20,12 @@ class IntacctSettings(Document):
 		Only when something actually changed: re-applying permissions on every save of
 		an unrelated field is churn, and permission writes are not free.
 		"""
+		# Not during install or migrate. after_install applies permissions itself once
+		# everything is in place; doing it again from inside a save that migrate triggered
+		# meant a seeding step could take the whole deploy down with it.
+		if frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch:
+			return
+
 		before = self.get_doc_before_save()
 		if before is not None:
 			was = {row.module_key: row.enabled for row in before.get("active_modules") or []}

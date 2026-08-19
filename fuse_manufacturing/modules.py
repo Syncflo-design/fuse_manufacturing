@@ -67,6 +67,13 @@ def sync_modules():
 		return
 
 	settings = frappe.get_single("Intacct Settings")
+	# Seeding a settings table must never be the reason a deploy fails. Intacct Settings
+	# has required fields, and a save during migrate can throw for reasons that have
+	# nothing to do with this table — on a site where credentials are not filled in yet,
+	# for instance. A missing row costs an admin one click; a failed migrate costs the
+	# whole release, which is what happened on 2026-08-19.
+	settings.flags.ignore_mandatory = True
+	settings.flags.ignore_validate = True
 	chosen = {row.module_key: row.enabled for row in settings.get("active_modules") or []}
 
 	settings.set("active_modules", [])
