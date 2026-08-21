@@ -892,7 +892,7 @@ def block_inactive_module(doc, method=None):
 	if modules.is_active(key):
 		return
 
-	label = modules.MODULES_BY_KEY.get(key, {}).get("label", key)
+	label = modules.module_label(key)
 	frappe.throw(
 		f"{label} is switched off for this site, so this movement cannot be recorded.\n\n"
 		"An administrator can switch it back on under Active Modules in Intacct Settings.",

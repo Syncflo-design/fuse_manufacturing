@@ -56,7 +56,49 @@ MODULES = [
 	},
 ]
 
-MODULES_BY_KEY = {module["key"]: module for module in MODULES}
+def all_modules():
+	"""The registry above, plus whatever another Fuse app contributes.
+
+	A separately sold part of Fuse — Projects, say — ships as its own app and cannot edit
+	this list. It declares a `fuse_modules` hook instead, pointing at a callable that
+	returns rows in the same shape, and its switch appears under Active Modules alongside
+	the built-in ones.
+
+	Resolved on every call rather than at import: hooks need an app context, and there is
+	none while this module is still being imported.
+
+	A contributor that raises is skipped rather than allowed to take the settings page down
+	with it. Its switch then reads as ON, which is what a site without that app looks like
+	anyway.
+	"""
+	registry = list(MODULES)
+	seen = {module["key"] for module in registry}
+
+	for method in frappe.get_hooks("fuse_modules") or []:
+		try:
+			contributed = frappe.get_attr(method)() or []
+		except Exception:
+			frappe.log_error(
+				title=f"Fuse: could not read modules from {method}", message=frappe.get_traceback()
+			)
+			continue
+
+		for module in contributed:
+			# First declaration wins, so a contributor cannot redefine a built-in module and
+			# quietly change what its switch governs.
+			if module.get("key") and module["key"] not in seen:
+				seen.add(module["key"])
+				registry.append(dict(module))
+
+	return registry
+
+
+def module_label(key):
+	"""What to call one module in a message to a user. Unknown keys answer with the key."""
+	for module in all_modules():
+		if module["key"] == key:
+			return module.get("label") or key
+	return key
 
 
 def sync_modules():
@@ -82,7 +124,7 @@ def sync_modules():
 	chosen = {row.module_key: row.enabled for row in settings.get("active_modules") or []}
 
 	settings.set("active_modules", [])
-	for module in MODULES:
+	for module in all_modules():
 		settings.append(
 			"active_modules",
 			{
@@ -108,7 +150,7 @@ def active_modules():
 	"""
 	settings = frappe.get_cached_doc("Intacct Settings")
 	chosen = {row.module_key: bool(row.enabled) for row in settings.get("active_modules") or []}
-	return {module["key"]: chosen.get(module["key"], True) for module in MODULES}
+	return {module["key"]: chosen.get(module["key"], True) for module in all_modules()}
 
 
 def is_active(key):
