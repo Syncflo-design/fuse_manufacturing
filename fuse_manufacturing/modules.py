@@ -33,6 +33,16 @@ MODULES = [
 		"description": "Book supplier deliveries in against a mirrored purchase order.",
 	},
 	{
+		"key": "boms",
+		"label": "BOMs",
+		"description": "What each product is made of, and what can be built from stock on hand.",
+	},
+	{
+		"key": "production_plan",
+		"label": "Production Plan",
+		"description": "Explode demand through the BOMs and raise the works orders and material requests it calls for.",
+	},
+	{
 		"key": "works_orders",
 		"label": "Works Orders",
 		"description": "Record production against a works order.",
