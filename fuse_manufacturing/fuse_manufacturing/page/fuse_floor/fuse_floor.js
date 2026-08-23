@@ -16,7 +16,7 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.6.0-2026-08-18-receiving';
+	var BUILD_MARKER = 'v0.7.1-2026-08-23-receiving-first';
 	console.log('Fuse Shop Floor loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-floor-stylesheet')) {
@@ -199,11 +199,20 @@ FuseFloor.prototype.home = function () {
 
 	this.render([
 		'<div class="ff-menu">',
+		// Receiving first: it is the start of the day and the start of the process, and it
+		// is the tile reached most often — stock arrives more times than it is made.
+		ff_tile('receive', 'receive', 'Receiving', 'Book a delivery in against a purchase order'),
 		ff_tile('run', 'orders', 'Works Orders', 'Record what you made against a works order'),
 		ff_tile('wip', 'wip', 'Issue to WIP', 'Move components from a store onto the floor'),
 		ff_tile('move', 'transfer', 'Item Transfer', 'Warehouse to warehouse'),
-		ff_tile('receive', 'receive', 'Receiving', 'Book a delivery in against a purchase order'),
-		'</div>'
+		'</div>',
+		// Projects, when Fuse Projects is installed. A link rather than a fifth tile, and
+		// below the four: this is a different day's work, not another thing an operator
+		// does on the line. Absent entirely on a site without that app — a dead link on a
+		// phone reads as a broken system.
+		this.context && this.context.site_work
+			? '<a class="ff-elsewhere" href="/app/' + this.context.site_work + '">Site work — jobs, tasks and time</a>'
+			: ''
 	].join('\n'));
 
 	this.$root.find('[data-go]').on('click', function () {

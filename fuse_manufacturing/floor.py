@@ -85,6 +85,15 @@ def bootstrap():
 		# shift into a system that is not posting would find out at month end.
 		"posting_on": bool(settings.post_movements),
 		"user": frappe.session.user,
+		# The project screens, if Fuse Projects is installed. A phone should have one
+		# way in, not two — a foreman who books time on a job and then moves stock for
+		# it should not have to know they are different apps.
+		#
+		# None when that app is absent: a dead link on a phone reads as a broken system,
+		# and this app must run without it.
+		"site_work": "fuse-projects-floor"
+		if frappe.db.exists("Page", "fuse-projects-floor")
+		else None,
 	}
 
 

@@ -118,6 +118,26 @@
 	gap: var(--ff-3);
 }
 
+/* The way out to the project screens. Quieter than a tile on purpose: it leaves the
+   line rather than being another thing done on it, and it should not compete with the
+   four actions above for a thumb. */
+.ff-elsewhere {
+	display: block;
+	margin-top: var(--ff-6);
+	padding: var(--ff-4);
+	text-align: center;
+	font-size: 15px;
+	color: var(--ff-muted);
+	text-decoration: none;
+	border-top: 1px solid var(--ff-line);
+}
+
+.ff-elsewhere:hover,
+.ff-elsewhere:focus {
+	color: var(--ff-ink);
+	text-decoration: underline;
+}
+
 .ff-tile {
 	display: flex;
 	align-items: center;
