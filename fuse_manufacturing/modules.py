@@ -28,6 +28,11 @@ from fuse_core.modules import (  # noqa: F401
 # the person reading the settings page, who is not the person who wrote the tile.
 MODULES = [
 	{
+		"key": "material_request",
+		"label": "Material Request",
+		"description": "Ask for what the floor needs — the requisition that starts a purchase.",
+	},
+	{
 		"key": "receiving",
 		"label": "Receiving",
 		"description": "Book supplier deliveries in against a mirrored purchase order.",
