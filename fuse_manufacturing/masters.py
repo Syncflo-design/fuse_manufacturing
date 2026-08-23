@@ -8,9 +8,10 @@ Every function is idempotent: run it twice and the second run changes nothing.
 """
 
 import frappe
+from fuse_core import gateway, transactions
+from fuse_core.gateway import flag, number, val
 
-from fuse_manufacturing import gateway, rules
-from fuse_manufacturing.gateway import flag, number, val
+from fuse_manufacturing import rules
 
 # The decision logic lives in rules.py, which imports no Frappe and is covered by tests
 # that run in a second without a site. Re-exported here so callers keep one import.
@@ -136,7 +137,9 @@ def list_transaction_definitions(company=None):
 	# under Transactions. A process nobody has mapped yet is not "missing" here — it is
 	# reported as unmapped by transactions.mapping_status, which is a different fault with
 	# a different fix.
-	from fuse_manufacturing import postings, transactions
+	from fuse_core import transactions
+
+	from fuse_manufacturing import postings
 
 	mapped = {
 		row["key"]: row["definition"]
@@ -619,7 +622,6 @@ def list_purchasing_definitions(company=None):
 	}
 
 
-@frappe.whitelist()
 def sync_transaction_definitions(company=None):
 	"""Mirror every transaction definition this company has, so processes can PICK one.
 
@@ -709,7 +711,7 @@ def sync_transaction_definitions(company=None):
 	frappe.db.commit()
 
 	# The picker is only useful once the processes that read it exist.
-	from fuse_manufacturing import transactions
+	from fuse_core import transactions
 
 	transactions.sync_processes()
 
@@ -2181,7 +2183,7 @@ def _sync_config(company=None):
 		# is plenty. It matters that this runs at all: a definition renamed there would
 		# otherwise leave a process mapped to a name that no longer exists, and the first
 		# anyone would know is a rejection at a delivery.
-		"transaction_definitions": sync_transaction_definitions(company=company),
+		"transaction_definitions": transactions.sync_transaction_definitions(company=company),
 	}
 
 

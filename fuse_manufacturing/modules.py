@@ -1,19 +1,27 @@
-"""Which parts of Fuse a client has switched on.
+"""Which parts of Fuse Manufacturing a client has switched on.
 
 This is a LAUNCHER preference, not a permission. Switching a module off takes its tile
-off Fuse Home and nothing else: the doctypes behind it still work, and someone who
-knows the URL or uses the awesome bar still gets there. Anything stronger belongs in
-role permissions, which a deploy overwrites (see the 2026-05-20 gotcha), or in a guard
-on the doctype itself — both bigger decisions than tidying a home page.
+off Fuse Home and nothing else: the doctypes behind it still work, and someone who knows
+the URL or uses the awesome bar still gets there. Anything stronger belongs in role
+permissions, which a deploy overwrites (see the 2026-05-20 gotcha), or in a guard on the
+doctype itself — both bigger decisions than tidying a home page.
 
-The registry lives here rather than in `fuse_theme` because these are Fuse's features;
-the theme only draws tiles for them. The theme asks this module what is on, and works
-without it — a site with no integration app shows everything.
+The TABLE and the rules for it live in fuse_core, which owns Intacct Settings. What lives
+here is the list of features this app actually implements, handed to core through the
+`fuse_modules` hook. That split is what lets Manufacturing and Projects be sold and
+installed separately: core knows there are switches, not what they switch.
 """
 
-import frappe
+# Read from core rather than reimplemented. Callers in this app — postings.py, install.py
+# — go on using modules.is_active and modules.sync_modules exactly as before.
+from fuse_core.modules import (  # noqa: F401
+	active_modules,
+	is_active,
+	module_label,
+	sync_modules,
+)
 
-# Every switchable part of Fuse, in the order it appears on the home page.
+# Every switchable part of this app, in the order it appears on the home page.
 #
 # `key` is what fuse_theme matches its tiles on and is permanent — renaming one orphans
 # a client's setting and silently turns the module back on. The label and blurb are for
@@ -56,106 +64,14 @@ MODULES = [
 	},
 ]
 
-def all_modules():
-	"""The registry above, plus whatever another Fuse app contributes.
 
-	A separately sold part of Fuse — Projects, say — ships as its own app and cannot edit
-	this list. It declares a `fuse_modules` hook instead, pointing at a callable that
-	returns rows in the same shape, and its switch appears under Active Modules alongside
-	the built-in ones.
+def get_modules():
+	"""This app's switches, for core's `fuse_modules` hook.
 
-	Resolved on every call rather than at import: hooks need an app context, and there is
-	none while this module is still being imported.
-
-	A contributor that raises is skipped rather than allowed to take the settings page down
-	with it. Its switch then reads as ON, which is what a site without that app looks like
-	anyway.
+	A copy, not the list itself: core merges what every app contributes, and a caller that
+	edited the result would be editing this module's own registry.
 	"""
-	registry = list(MODULES)
-	seen = {module["key"] for module in registry}
-
-	for method in frappe.get_hooks("fuse_modules") or []:
-		try:
-			contributed = frappe.get_attr(method)() or []
-		except Exception:
-			frappe.log_error(
-				title=f"Fuse: could not read modules from {method}", message=frappe.get_traceback()
-			)
-			continue
-
-		for module in contributed:
-			# First declaration wins, so a contributor cannot redefine a built-in module and
-			# quietly change what its switch governs.
-			if module.get("key") and module["key"] not in seen:
-				seen.add(module["key"])
-				registry.append(dict(module))
-
-	return registry
-
-
-def module_label(key):
-	"""What to call one module in a message to a user. Unknown keys answer with the key."""
-	for module in all_modules():
-		if module["key"] == key:
-			return module.get("label") or key
-	return key
-
-
-def sync_modules():
-	"""Make the settings table match the registry, without touching what is switched on.
-
-	Runs on every migrate. New modules arrive switched ON, because a feature that ships
-	invisible looks broken rather than optional. Retired ones are dropped, so the page
-	never lists something that no longer exists.
-
-	A client's own choice is never overwritten — that is the whole point of the table.
-	"""
-	if not frappe.db.exists("DocType", "Fuse Active Module"):
-		return
-
-	settings = frappe.get_single("Intacct Settings")
-	# Seeding a settings table must never be the reason a deploy fails. Intacct Settings
-	# has required fields, and a save during migrate can throw for reasons that have
-	# nothing to do with this table — on a site where credentials are not filled in yet,
-	# for instance. A missing row costs an admin one click; a failed migrate costs the
-	# whole release, which is what happened on 2026-08-19.
-	settings.flags.ignore_mandatory = True
-	settings.flags.ignore_validate = True
-	chosen = {row.module_key: row.enabled for row in settings.get("active_modules") or []}
-
-	settings.set("active_modules", [])
-	for module in all_modules():
-		settings.append(
-			"active_modules",
-			{
-				"module_key": module["key"],
-				"label": module["label"],
-				"description": module["description"],
-				# Present and set → keep it. Absent → new, so on.
-				"enabled": chosen.get(module["key"], 1),
-			},
-		)
-
-	settings.flags.ignore_permissions = True
-	settings.save(ignore_permissions=True)
-
-
-@frappe.whitelist()
-def active_modules():
-	"""What is switched on, as {key: True/False}.
-
-	A key missing from the table reads as ON. That matters on a site migrated before the
-	table existed, and on the first load after a new module ships — in both cases the
-	honest answer is "nobody has turned this off".
-	"""
-	settings = frappe.get_cached_doc("Intacct Settings")
-	chosen = {row.module_key: bool(row.enabled) for row in settings.get("active_modules") or []}
-	return {module["key"]: chosen.get(module["key"], True) for module in all_modules()}
-
-
-def is_active(key):
-	"""Whether one module is switched on. Unknown keys are on, for the same reason."""
-	return active_modules().get(key, True)
+	return [dict(module) for module in MODULES]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -163,9 +79,10 @@ def is_active(key):
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Doctypes the Fuse role loses when a module is off. Re-applied on every migrate AND
-# whenever the settings are saved, so a deploy re-asserting permissions (the
-# 2026-05-20 gotcha) works FOR this rather than against it: the app JSON is the source
-# of truth, and the source of truth now reads the client's choice.
+# whenever the settings are saved — core announces that through the `fuse_modules_changed`
+# hook — so a deploy re-asserting permissions (the 2026-05-20 gotcha) works FOR this
+# rather than against it: the app JSON is the source of truth, and the source of truth now
+# reads the client's choice.
 MODULE_DOCTYPES = {
 	"receiving": ["Purchase Receipt"],
 	"works_orders": ["Work Order"],

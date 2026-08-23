@@ -266,6 +266,74 @@ CUSTOM_FIELDS = {
 			"description": "Sent as <locationid> on every gateway login. Manufacturing definitions are 'Entity only'.",
 		},
 	],
+	# Settings that belong to THIS app, added to the doctype core owns.
+	#
+	# Intacct Settings moved to fuse_core so that Projects — or anything else sold on its
+	# own — reaches Intacct through the same credentials instead of a second copy of them.
+	# What core kept is the connection: credentials, entity, page size, timeouts, and the
+	# module switches. Recipes, process mapping, the receiving reject warehouse and the item
+	# sync watermark are about stock, so they come back here.
+	#
+	# The fieldnames are unchanged on purpose. Intacct Settings is a Single, so its values
+	# are stored against the field NAME — a standard field becoming a custom field of the
+	# same name keeps every value a client has already set, and the process mapping rows
+	# stay attached because their parentfield still reads transaction_mappings.
+	"Intacct Settings": [
+		{
+			"fieldname": "recipes_section",
+			"fieldtype": "Section Break",
+			"label": "Recipes",
+			"insert_after": "active_modules",
+			"description": "Where this client's recipes live. The two switches answer different questions: the first is whether Intacct HAS the recipes, the second is whether anyone may keep one here as well.",
+		},
+		{
+			"fieldname": "use_intacct_kits_as_boms",
+			"fieldtype": "Check",
+			"label": "Use Intacct Kits as BOMs",
+			"default": "1",
+			"insert_after": "recipes_section",
+			"description": "On: every Intacct kit is mirrored here as a BOM on each kit sync, and Intacct's recipe is always restored as the default. Leadertread works this way. Off: the kit sync does nothing and BOMs are whatever exists in Fuse — for a client whose recipes are not in Intacct at all. Switching it off leaves existing BOMs alone; it only stops them being rewritten.",
+		},
+		{
+			"fieldname": "boms_from_intacct",
+			"fieldtype": "Check",
+			"label": "Lock BOM Creation in Fuse",
+			"default": "1",
+			"insert_after": "use_intacct_kits_as_boms",
+			"description": "On: the New button is hidden on BOMs and an insert is refused — the kit sync is the only thing that may build one. Off: BOMs can be created here as in stock ERPNext.\n\nNormally on wherever the switch above is on: a hand-built BOM would be a second recipe Intacct has never heard of, and the next sync would quietly make Intacct's the default again.",
+		},
+		{
+			"fieldname": "defaults_section",
+			"fieldtype": "Section Break",
+			"label": "Defaults",
+			"insert_after": "boms_from_intacct",
+		},
+		{
+			"fieldname": "default_item_group",
+			"fieldtype": "Link",
+			"label": "Default Item Group",
+			"options": "Item Group",
+			"default": "Products",
+			"insert_after": "defaults_section",
+			"description": "Intacct has no item-group concept that maps onto ERPNext's, so every synced item lands here.",
+		},
+		{
+			"fieldname": "reject_warehouse",
+			"fieldtype": "Link",
+			"label": "Receiving Rejects Warehouse",
+			"options": "Warehouse",
+			"insert_after": "default_item_group",
+			"description": "Where rejected quantities go when goods are received. Intacct does not record which of its warehouses is the reject one, so this is a Fuse routing choice, not mirrored data — the one thing on this page that is not read from Intacct. The warehouse itself still comes from Intacct like every other. Receiving refuses a rejected quantity while this is empty, rather than quietly putting it back into good stock.",
+		},
+		{
+			"fieldname": "last_item_sync",
+			"fieldtype": "Datetime",
+			"label": "Last Item Sync",
+			"read_only": 1,
+			"insert_after": "status_section",
+			"description": "Set only after a clean hourly run. A failure leaves it alone so the next attempt covers the same window instead of skipping it. Clear this to force a full re-read.",
+		},
+	],
 }
 
 
@@ -431,7 +499,9 @@ def after_install():
 
 	# Before permissions: they are derived from what is switched on, so the table has to
 	# exist and be in step with the registry first.
-	from fuse_manufacturing import modules, transactions
+	from fuse_core import transactions
+
+	from fuse_manufacturing import modules
 
 	# Seeding is a convenience: it fills two settings tables so an admin opens the page
 	# and sees what Fuse needs. It is NOT worth a release.

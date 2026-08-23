@@ -13,8 +13,9 @@ import xml.etree.ElementTree as ET
 
 import frappe
 from frappe.utils import flt
+from fuse_core import gateway
 
-from fuse_manufacturing import gateway, rules
+from fuse_manufacturing import rules
 
 # Intacct's transfer types. "Immediate" lands the stock in the destination on posting,
 # which is what a store-to-store move is. "In transit" parks it until received.
@@ -93,7 +94,7 @@ def mapped_definition(process_key):
 	Not named `definition`: two builders below take a `definition` keyword, and a helper
 	sharing that name is one careless edit away from being shadowed by a parameter.
 	"""
-	from fuse_manufacturing import transactions
+	from fuse_core import transactions
 
 	return transactions.definition_for(process_key)
 

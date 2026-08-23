@@ -41,8 +41,10 @@ That is why the switch is happening now, and why this is not a cutover project.
 - **No .NET middleware, no proxy service.** Python/`requests` inside Frappe is enough.
   Errors surface in the request that caused them; retries and scheduling come free from
   Frappe's queue; per-client config lives in DocTypes.
-- **Two apps, separately releasable:** the integration app, and a *theme* app.
-  Cosmetic changes must never force an integration release.
+- **Separately releasable apps.** `fuse_core` holds the Intacct connection — gateway,
+  credentials, request log, module switches. `fuse_manufacturing` (stock) and
+  `fuse_projects` (project working) sit on it and are sold separately. `fuse_theme` is the
+  look, and cosmetic changes must never force an integration release.
 
 ## Tenancy
 
@@ -156,7 +158,9 @@ Frappe Cloud's "Add app from GitHub" picks a directory at the root and expects
 `hooks.py` inside it — a second one at the root (`docs/`, `gotchas/`) makes it reject
 the repo as "Not a valid Frappe App". That is why the docs live inside the app.
 
-- `fuse_manufacturing/` — the Frappe app (`hooks.py`, `gateway.py`, `masters.py`, `install.py`).
+- `fuse_manufacturing/` — the Frappe app (`hooks.py`, `masters.py`, `postings.py`, `install.py`).
+  The gateway and Intacct Settings are NOT here — they live in `fuse_core`
+  (`C:/ClaudeCode/fuse_core`), which this app declares in `required_apps`.
 - `fuse_manufacturing/docs/` — spec, Intacct integration reference, decision log, workflow document.
 - `fuse_manufacturing/gotchas/` — `YYYY-MM-DD-short-title.md`.
 - The GitHub repo is `fuse_manufacturing`, lowercase — `bench get-app` clones into a

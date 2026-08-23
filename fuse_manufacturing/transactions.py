@@ -1,30 +1,23 @@
-"""Which Intacct definition each Fuse process posts to.
+"""The Intacct processes this app posts, and nothing else.
 
-Every Intacct company names its transaction definitions differently. Leadertread calls
-its goods receipt "Goods received voucher"; the donor's company called the same thing
-"PO Receiver-Inventory". A name that is right for one client is wrong for the next, and
-the rejection it causes names no field — so nothing here is a constant and nothing is
-defaulted from another client.
+The table, the picker and the rules for both live in `fuse_core.transactions`, which owns
+Intacct Settings. What lives here is the list of processes THIS app posts, handed to core
+through the `fuse_processes` hook — the same split as the module switches in modules.py.
 
-Two halves:
+That is what lets the Transactions table grow as apps are added: Projects will declare its
+own processes the day it posts one, and core will not need to change to accommodate them.
 
-  * `Intacct Transaction Definition` mirrors what the company actually has, read from
-    Intacct. That is the picker.
-  * The Transactions table on Intacct Settings maps one Fuse process to one of those
-    definitions. That is the client's choice.
-
-`definition_for` is what the postings call. It refuses rather than guesses.
+Anything that needs to READ a mapping — the postings, mostly — calls
+`fuse_core.transactions.definition_for`.
 """
 
-import frappe
-
-# Every process that posts a definition-driven document, in the order it appears on the
-# settings page.
+# Every process this app posts a definition-driven document for, in the order it appears on
+# the settings page.
 #
 # `seed` is the name this process used while it was a constant in postings.py. It is a
-# STARTING POINT for a site that already worked, not a default: it is written once, when
-# the row is first created, and only if that definition actually exists on the company.
-# A fresh client seeds nothing and must choose.
+# STARTING POINT for a site that already worked, not a default: it is written once, when the
+# row is first created, and only if that definition actually exists on the company. A fresh
+# client seeds nothing and must choose.
 #
 # `key` is permanent. The postings look definitions up by it, so renaming one unmaps the
 # process without saying so.
@@ -71,96 +64,11 @@ PROCESSES = [
 	},
 ]
 
-PROCESSES_BY_KEY = {process["key"]: process for process in PROCESSES}
 
+def get_processes():
+	"""This app's processes, for core's `fuse_processes` hook.
 
-def sync_processes():
-	"""Make the settings table match the registry, without touching what is mapped.
-
-	Runs on every migrate. A client's choice is never overwritten; only rows that do not
-	exist yet are created, and only they take a seed.
+	A copy, not the list itself: core merges what every app contributes, and a caller that
+	edited the result would be editing this module's own registry.
 	"""
-	if not frappe.db.exists("DocType", "Intacct Transaction Mapping"):
-		return
-
-	settings = frappe.get_single("Intacct Settings")
-	# Same reasoning as modules.sync_modules: seeding is a convenience and must never be
-	# able to fail a migrate.
-	settings.flags.ignore_mandatory = True
-	settings.flags.ignore_validate = True
-	chosen = {
-		row.process_key: row.definition for row in settings.get("transaction_mappings") or []
-	}
-
-	settings.set("transaction_mappings", [])
-	for process in PROCESSES:
-		definition = chosen.get(process["key"])
-
-		# Seed only a row that has never existed, and only where the definition is really
-		# on this company. Writing a name Intacct does not have would put a broken value
-		# in front of an admin and look like a considered choice.
-		if process["key"] not in chosen and process["seed"]:
-			if frappe.db.exists("Intacct Transaction Definition", process["seed"]):
-				definition = process["seed"]
-
-		settings.append(
-			"transaction_mappings",
-			{
-				"process_key": process["key"],
-				"label": process["label"],
-				"description": process["description"],
-				"required": process["required"],
-				"definition": definition,
-			},
-		)
-
-	settings.flags.ignore_permissions = True
-	settings.save(ignore_permissions=True)
-
-
-def definition_for(key):
-	"""The Intacct definition this process posts to, or a refusal saying so.
-
-	Refuses rather than falling back to the name that used to be hardcoded. A fallback
-	would post to whatever the donor's company called it — silently, on a client where
-	that name means nothing or, worse, means something else.
-	"""
-	settings = frappe.get_cached_doc("Intacct Settings")
-	for row in settings.get("transaction_mappings") or []:
-		if row.process_key == key and row.definition:
-			return row.definition
-
-	process = PROCESSES_BY_KEY.get(key, {})
-	label = process.get("label", key)
-	frappe.throw(
-		f"No Intacct definition is mapped for “{label}”, so this cannot be posted.\n\n"
-		"Set it under Transactions on Intacct Settings. The list shows the definitions "
-		"this company actually has — run the definitions sync first if it is empty.",
-		title="Intacct definition not mapped",
-	)
-
-
-@frappe.whitelist()
-def mapping_status():
-	"""What is mapped and what is not — for checking a new site before anyone posts."""
-	settings = frappe.get_cached_doc("Intacct Settings")
-	mapped = {
-		row.process_key: row.definition for row in settings.get("transaction_mappings") or []
-	}
-	return {
-		"processes": [
-			{
-				"key": process["key"],
-				"label": process["label"],
-				"required": bool(process["required"]),
-				"definition": mapped.get(process["key"]),
-				"ready": bool(mapped.get(process["key"])),
-			}
-			for process in PROCESSES
-		],
-		"unmapped": [
-			process["label"]
-			for process in PROCESSES
-			if process["required"] and not mapped.get(process["key"])
-		],
-	}
+	return [dict(process) for process in PROCESSES]

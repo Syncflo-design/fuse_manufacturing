@@ -5,6 +5,12 @@ app_description = "Sage Intacct integration for ERPNext — masters in, stock po
 app_email       = "ops@syncflo.co.za"
 app_license     = "MIT"
 
+# The Intacct connection — gateway, credentials, request log and the module switch table —
+# lives in fuse_core. Declared here so a bench cannot end up with this app and not that
+# one, and so migrate runs core first: Intacct Settings has to belong to core before this
+# app's custom fields are added to it.
+required_apps = ["fuse_core"]
+
 after_install = "fuse_manufacturing.install.after_install"
 
 # Custom fields have to be re-applied on every migrate, not only at install. A field
@@ -79,3 +85,19 @@ scheduler_events = {
 		"fuse_manufacturing.masters.scheduled_config_sync",
 	],
 }
+
+# This app's own switches, handed to core, which owns the table they live in. Core knows
+# there are switches; it does not know what Receiving is.
+fuse_modules = ["fuse_manufacturing.modules.get_modules"]
+
+# The Intacct processes this app posts. Core owns the Transactions table on Intacct
+# Settings and the picker behind it; what needs mapping belongs to the app that posts
+# it, so the table grows as apps are added without core learning what a goods receipt
+# is.
+fuse_processes = ["fuse_manufacturing.transactions.get_processes"]
+
+# What this app does when a switch is toggled: withdraw or restore the doctypes behind it.
+# Core announces the change — it cannot call this app directly, and must not know it is
+# installed. Without this, turning Receiving off would take the tile away and leave the
+# Purchase Receipt reachable until the next migrate.
+fuse_modules_changed = ["fuse_manufacturing.install._apply_role_permissions"]
