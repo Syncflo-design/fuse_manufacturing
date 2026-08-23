@@ -63,9 +63,13 @@ MODULES = [
 		"description": "Move stock between warehouses.",
 	},
 	{
+		# Off unless asked for. It lands on the same subject as Stock Control, which is the
+		# curated version — two tiles onto one room is the confusion the tile grid exists to
+		# remove. Left switchable for a client whose own administrator wants the full module.
 		"key": "stock",
 		"label": "Stock",
-		"description": "ERPNext's own Stock workspace — the full module, for general stock management.",
+		"description": "ERPNext's own Stock workspace — the full module, for general stock management. Off by default; Stock Control covers the same ground, curated.",
+		"default": 0,
 	},
 	{
 		"key": "stock_control",
