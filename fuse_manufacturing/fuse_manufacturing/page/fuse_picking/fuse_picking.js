@@ -172,7 +172,7 @@ FusePicking.prototype.paint = function () {
 	html.push(
 		'<th>Item</th><th class="fr-right">Ordered</th><th class="fr-right">Delivered</th>' +
 		'<th class="fr-right">To pick</th><th class="fr-right">Available</th>' +
-		'<th class="fr-right">Picking</th><th>Lot</th><th>Bin</th>'
+		'<th class="fr-right">Picking</th><th>Lot</th><th>Bin</th><th>Inspection</th>'
 	);
 	html.push('</tr></thead><tbody>');
 
@@ -203,6 +203,15 @@ FusePicking.prototype.paint = function () {
 				? '<input class="fr-lot" data-bin="' + fp_escape(id) + '" value="' + fp_escape(held.bin || '') + '"' +
 				  ' placeholder="default">'
 				: '<span class="fr-muted">not tracked</span>') +
+			'</td>' +
+			// Only where the item's specification says so. Everything else says plainly
+			// that nothing is required, rather than leaving an empty cell to wonder about.
+			'<td>' +
+			(line.needs_inspection
+				? (held.inspection
+					? '<span class="fr-qc-done">' + fp_escape(window.fuseQuality.summary(held.inspection)) + '</span>'
+					: '<button class="fr-qc" data-qc="' + fp_escape(id) + '">Record</button>')
+				: '<span class="fr-muted">not required</span>') +
 			'</td>' +
 			'</tr>'
 		);
@@ -238,6 +247,10 @@ FusePicking.prototype.paint = function () {
 		$(this).val('');
 	});
 
+	this.$root.find('[data-qc]').on('click', function () {
+		self.inspect($(this).data('qc'));
+	});
+
 	this.$root.find('[data-record]').on('click', function () {
 		self.record(false);
 	});
@@ -245,9 +258,43 @@ FusePicking.prototype.paint = function () {
 	this.$root.find('[data-scan]').focus();
 };
 
+// Ask for the inspection on one line and hold it against that line. Nothing is written
+// until the delivery is recorded, so the check and the movement stand or fall together.
+FusePicking.prototype.inspect = function (id) {
+	var self = this;
+	var line = (this.order.lines || []).filter(function (l) {
+		return l.sales_order_item === id;
+	})[0];
+	if (!line) return;
+
+	this.hold();
+
+	window.fuseQuality.requirement(line.item_code, 'Delivery Note', function (requirement) {
+		if (!requirement.required) {
+			frappe.show_alert({ message: 'No inspection is required for this item.', indicator: 'blue' });
+			return;
+		}
+		window.fuseQuality.capture(
+			{
+				item_code: line.item_code,
+				item_name: line.item_name,
+				reference_type: 'Delivery Note',
+				batch_no: (self.captured[id] || {}).lot || null,
+				requirement: requirement
+			},
+			function (captured) {
+				self.captured[id] = self.captured[id] || {};
+				self.captured[id].inspection = captured;
+				self.paint();
+			}
+		);
+	});
+};
+
 // Read every row's inputs into `captured`, so a repaint keeps them.
 FusePicking.prototype.hold = function () {
 	var self = this;
+	var held = this.captured || {};
 	this.captured = {};
 
 	this.$root.find('[data-pick]').each(function () {
@@ -264,6 +311,15 @@ FusePicking.prototype.hold = function () {
 		var id = $(this).data('bin');
 		self.captured[id] = self.captured[id] || {};
 		self.captured[id].bin = ($(this).val() || '').trim();
+	});
+
+	// Inspections are not on an input, so they would be lost every repaint. Carried
+	// across explicitly.
+	Object.keys(held).forEach(function (id) {
+		if (held[id] && held[id].inspection) {
+			self.captured[id] = self.captured[id] || {};
+			self.captured[id].inspection = held[id].inspection;
+		}
 	});
 };
 
@@ -335,7 +391,8 @@ FusePicking.prototype.record = function (confirmed) {
 			item_code: line.item_code,
 			qty: flt(held.qty),
 			lot: held.lot || null,
-			bin: held.bin || null
+			bin: held.bin || null,
+			inspection: held.inspection || null
 		});
 	});
 

@@ -108,7 +108,13 @@ def order_lines(sales_order):
 		item = frappe.db.get_value(
 			"Item",
 			row.item_code,
-			["item_name", "stock_uom", "custom_intacct_lot_tracked", "custom_intacct_bin_tracked"],
+			[
+				"item_name",
+				"stock_uom",
+				"custom_intacct_lot_tracked",
+				"custom_intacct_bin_tracked",
+				"inspection_required_before_delivery",
+			],
 			as_dict=True,
 		)
 		available = frappe.db.get_value(
@@ -126,10 +132,12 @@ def order_lines(sales_order):
 				"delivered": flt(row.delivered_qty),
 				"outstanding": outstanding,
 				"available": flt(available),
-				# What the screen must ask for on this line. Driven by Intacct's own flags,
-				# so a site that tracks neither is never asked for either.
+				# What the screen must ask for on this line. Lot and bin are driven by
+				# Intacct's own flags, so a site that tracks neither is never asked for
+				# either; the inspection is driven by the item's specification.
 				"needs_lot": bool(item.custom_intacct_lot_tracked),
 				"needs_bin": bool(item.custom_intacct_bin_tracked),
+				"needs_inspection": bool(item.inspection_required_before_delivery),
 			}
 		)
 
@@ -283,6 +291,19 @@ def submit_delivery(sales_order, rows, posting_date=None, confirm_over_delivery=
 		frappe.throw("Nothing was captured against this order.")
 
 	note.insert()
+
+	# Between insert and submit, deliberately. A Quality Inspection stores the document it
+	# belongs to, so the document has to exist — and the submit has to be the thing that
+	# fails if a required inspection is missing or did not pass, rather than goods leaving
+	# and a record being written afterwards.
+	from fuse_manufacturing import quality
+
+	quality.attach_inspections(
+		note,
+		{row.get("sales_order_item"): row for row in rows},
+		"so_detail",
+	)
+
 	note.submit()
 
 	return {

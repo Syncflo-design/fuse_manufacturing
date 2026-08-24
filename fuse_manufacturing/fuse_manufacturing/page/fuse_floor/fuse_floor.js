@@ -16,7 +16,7 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.8.0-2026-08-24-picking';
+	var BUILD_MARKER = 'v0.9.0-2026-08-24-quality';
 	console.log('Fuse Shop Floor loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-floor-stylesheet')) {
@@ -708,15 +708,25 @@ FuseFloor.prototype.check_components = function (wo, qty) {
 					return;
 				}
 
-				frappe.call({
-					method: 'fuse_manufacturing.floor.submit_manufacture',
-					args: { work_order: wo.name, qty: qty, rows: JSON.stringify(rows) },
-					freeze: true,
-					freeze_message: 'Sending to Intacct…',
-					callback: function (res) {
-						if (!res || !res.message) return;
-						self.done(res.message, 'Run recorded.');
-					}
+				// The in-process check on the batch just made, where the product carries a
+				// specification. Asked last, after the recipe is confirmed, because until
+				// then there is no batch to have an opinion about.
+				ff_inspect(produced || {}, 'Stock Entry', null, function (captured) {
+					frappe.call({
+						method: 'fuse_manufacturing.floor.submit_manufacture',
+						args: {
+							work_order: wo.name,
+							qty: qty,
+							rows: JSON.stringify(rows),
+							inspection: captured ? JSON.stringify(captured) : null
+						},
+						freeze: true,
+						freeze_message: 'Sending to Intacct…',
+						callback: function (res) {
+							if (!res || !res.message) return;
+							self.done(res.message, 'Run recorded.');
+						}
+					});
 				});
 			});
 		}
@@ -1066,15 +1076,22 @@ FuseFloor.prototype.ask_receive = function (po_item) {
 			}
 
 			dialog.hide();
-			self.receipt.push({
+			var row = {
 				purchase_order_item: po_item,
 				item_code: line.item_code,
 				qty: accepted,
 				rejected_qty: rejected,
 				warehouse: line.warehouse,
 				lot: values.lot || null
+			};
+
+			// Straight into the inspection where the item is checked on the way in. One
+			// flow, not two: the person who booked it in is the person holding the sample.
+			ff_inspect(line, 'Purchase Receipt', values.lot, function (captured) {
+				row.inspection = captured;
+				self.receipt.push(row);
+				self.paint_receiving();
 			});
-			self.paint_receiving();
 		}
 	});
 
@@ -1157,6 +1174,35 @@ FuseFloor.prototype.send_receipt = function (values, confirmed) {
 		}
 	});
 };
+
+// Ask for an inspection, if this line needs one, then carry on.
+//
+// Written once and called from receiving, picking and production, so the question is the
+// same wherever it is asked. `then` is called either way: with the captured result, or
+// with nothing when the item is not inspected — the caller does not branch.
+function ff_inspect(line, reference_type, batch_no, then) {
+	if (!line.needs_inspection || !window.fuseQuality) {
+		then(null);
+		return;
+	}
+
+	window.fuseQuality.requirement(line.item_code, reference_type, function (requirement) {
+		if (!requirement.required) {
+			then(null);
+			return;
+		}
+		window.fuseQuality.capture(
+			{
+				item_code: line.item_code,
+				item_name: line.item_name,
+				reference_type: reference_type,
+				batch_no: batch_no || null,
+				requirement: requirement
+			},
+			then
+		);
+	});
+}
 
 // ---------------------------------------------------------------------------
 // Picking — goods out to a customer. The mirror of receiving, and deliberately
@@ -1483,15 +1529,22 @@ FuseFloor.prototype.ask_pick = function (so_item) {
 			}
 
 			dialog.hide();
-			self.pick.push({
+			var row = {
 				sales_order_item: so_item,
 				item_code: line.item_code,
 				qty: qty,
 				warehouse: line.warehouse,
 				lot: values.lot || null,
 				bin: values.bin || null
+			};
+
+			// The release check, where the product carries a specification. This is the
+			// last point anything is looked at before it goes to a customer.
+			ff_inspect(line, 'Delivery Note', values.lot, function (captured) {
+				row.inspection = captured;
+				self.pick.push(row);
+				self.paint_picking();
 			});
-			self.paint_picking();
 		}
 	});
 

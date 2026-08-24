@@ -246,6 +246,22 @@ CUSTOM_FIELDS = {
 			"hidden": 1,
 		},
 	],
+	# ── Quality ───────────────────────────────────────────────────────────────
+	#
+	# ISO 9001 clause 7.1.5.2: a result is evidence only if the instrument that produced it
+	# was in calibration when the reading was taken. ERPNext records the reading and not the
+	# instrument, so this is the link between the two — and quality.block_uncalibrated_instrument
+	# is what makes it mean something.
+	"Quality Inspection": [
+		{
+			"fieldname": "custom_instrument",
+			"fieldtype": "Link",
+			"label": "Measured on",
+			"options": "Fuse Measuring Instrument",
+			"insert_after": "inspected_by",
+			"description": "The meter, balance or probe the readings were taken on. An instrument out of calibration on the report date is refused — a reading it produced cannot support a release.",
+		},
+	],
 	# ── Selling side ──────────────────────────────────────────────────────────
 	#
 	# Customers and their orders are mirrored from Intacct exactly as suppliers and purchase
@@ -489,6 +505,15 @@ ROLE_PERMISSIONS = {
 	"Delivery Note": _FULL,
 	"Sales Order": _READ_ONLY,
 	"Customer": _READ_ONLY,
+	# Quality. The person who receives, makes or picks is usually the person who takes the
+	# reading, so the role that raises the movement raises the inspection. Withdrawn again
+	# when the Quality module is switched off.
+	#
+	# The instrument register is read only here on purpose: who may declare a meter
+	# calibrated is a quality decision, not a stores one, and it belongs to whoever holds
+	# Quality Manager.
+	"Quality Inspection": _FULL,
+	"Fuse Measuring Instrument": _READ_ONLY,
 	# READ ONLY DELIBERATELY. Stock Reconciliation does not post to Intacct — it is what
 	# the opening stock sync uses. Create rights here would hand this role a way to change
 	# stock that Intacct never sees, which is the one thing the whole app prevents.

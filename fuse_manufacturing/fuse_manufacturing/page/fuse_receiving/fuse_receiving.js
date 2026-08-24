@@ -17,7 +17,7 @@ frappe.pages['fuse-receiving'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.5.0-2026-08-18';
+	var BUILD_MARKER = 'v0.6.0-2026-08-24-quality';
 	console.log('Fuse Receiving loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-receiving-stylesheet')) {
@@ -172,7 +172,8 @@ FuseReceiving.prototype.paint = function () {
 	html.push('<table class="fr-table fr-lines"><thead><tr>');
 	html.push(
 		'<th>#</th><th>Item</th><th class="fr-right">Ordered</th><th class="fr-right">Received</th>' +
-		'<th class="fr-right">Outstanding</th><th class="fr-right">Accept</th><th class="fr-right">Reject</th><th>Lot</th>'
+		'<th class="fr-right">Outstanding</th><th class="fr-right">Accept</th><th class="fr-right">Reject</th>' +
+		'<th>Lot</th><th>Inspection</th>'
 	);
 	html.push('</tr></thead><tbody>');
 
@@ -196,6 +197,14 @@ FuseReceiving.prototype.paint = function () {
 			(line.lot_tracked
 				? '<input class="fr-lot" data-lot="' + fr_escape(id) + '" value="' + fr_escape(held.lot || '') + '">'
 				: '<span class="fr-muted">not tracked</span>') +
+			'</td>' +
+			// Only where the item's specification says goods are checked on the way in.
+			'<td>' +
+			(line.needs_inspection
+				? (held.inspection
+					? '<span class="fr-qc-done">' + fr_escape(window.fuseQuality.summary(held.inspection)) + '</span>'
+					: '<button class="fr-qc" data-qc="' + fr_escape(id) + '">Record</button>')
+				: '<span class="fr-muted">not required</span>') +
 			'</td>' +
 			'</tr>'
 		);
@@ -234,6 +243,10 @@ FuseReceiving.prototype.paint = function () {
 		$(this).val('');
 	});
 
+	this.$root.find('[data-qc]').on('click', function () {
+		self.inspect($(this).data('qc'));
+	});
+
 	this.$root.find('[data-record]').on('click', function () {
 		self.record(false);
 	});
@@ -244,6 +257,7 @@ FuseReceiving.prototype.paint = function () {
 // Read every row's inputs into `captured`, so a repaint keeps them.
 FuseReceiving.prototype.hold = function () {
 	var self = this;
+	var held = this.captured || {};
 	this.captured = {};
 
 	this.$root.find('[data-accept]').each(function () {
@@ -260,6 +274,48 @@ FuseReceiving.prototype.hold = function () {
 		var id = $(this).data('lot');
 		self.captured[id] = self.captured[id] || {};
 		self.captured[id].lot = ($(this).val() || '').trim();
+	});
+
+	// Inspections are not on an input, so they would be lost every repaint.
+	Object.keys(held).forEach(function (id) {
+		if (held[id] && held[id].inspection) {
+			self.captured[id] = self.captured[id] || {};
+			self.captured[id].inspection = held[id].inspection;
+		}
+	});
+};
+
+// Ask for the inspection on one line and hold it there. Nothing is written until the
+// delivery is recorded, so the check and the movement stand or fall together.
+FuseReceiving.prototype.inspect = function (id) {
+	var self = this;
+	var line = null;
+	this.order.lines.forEach(function (candidate) {
+		if (candidate.purchase_order_item === id) line = candidate;
+	});
+	if (!line) return;
+
+	this.hold();
+
+	window.fuseQuality.requirement(line.item_code, 'Purchase Receipt', function (requirement) {
+		if (!requirement.required) {
+			frappe.show_alert({ message: 'No inspection is required for this item.', indicator: 'blue' });
+			return;
+		}
+		window.fuseQuality.capture(
+			{
+				item_code: line.item_code,
+				item_name: line.item_name,
+				reference_type: 'Purchase Receipt',
+				batch_no: (self.captured[id] || {}).lot || null,
+				requirement: requirement
+			},
+			function (captured) {
+				self.captured[id] = self.captured[id] || {};
+				self.captured[id].inspection = captured;
+				self.paint();
+			}
+		);
 	});
 };
 
@@ -338,7 +394,8 @@ FuseReceiving.prototype.record = function (confirmed) {
 			qty: accepted,
 			rejected_qty: rejected,
 			warehouse: line ? line.warehouse : null,
-			lot: held.lot || null
+			lot: held.lot || null,
+			inspection: held.inspection || null
 		});
 	});
 

@@ -210,6 +210,11 @@ def work_order_lines(work_order, qty):
 			"t_warehouse": row.t_warehouse,
 		}
 		if row.get("is_finished_item"):
+			# Whether the batch about to be made gets checked before it counts as made.
+			# The item's own specification decides; most items have none.
+			line["needs_inspection"] = bool(
+				frappe.db.get_value("Item", row.item_code, "inspection_required_before_delivery")
+			)
 			produced = line
 		else:
 			consumed.append(line)
@@ -275,12 +280,16 @@ def submit_transfer(purpose, rows, work_order=None):
 
 
 @frappe.whitelist()
-def submit_manufacture(work_order, qty, rows):
+def submit_manufacture(work_order, qty, rows, inspection=None):
 	"""Record a production run against a works order.
 
 	Consumption and production reach Intacct as one atomic operation, so a run can
 	never half-record — that is `postings.post_stock_entry_manufacture`'s job. This
 	only decides what was consumed.
+
+	`inspection` is the in-process check on the batch just made, where the finished item is
+	flagged for one: readings, the instrument they were taken on, and whether it passed.
+	Absent for most items, which are not inspected.
 	"""
 	_guard()
 	qty = flt(qty)
@@ -288,6 +297,9 @@ def submit_manufacture(work_order, qty, rows):
 		frappe.throw("Enter how much you actually made.")
 
 	rows = _rows(rows)
+	# Arrives as JSON from a browser, like every other structured argument on these screens.
+	if isinstance(inspection, str):
+		inspection = json.loads(inspection) if inspection.strip() else None
 
 	from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
 
@@ -346,6 +358,20 @@ def submit_manufacture(work_order, qty, rows):
 		entry.items.append(line)
 
 	entry.insert()
+
+	# The in-process check, between insert and submit for the same reason receiving and
+	# picking do it there: a Quality Inspection stores the document it belongs to, and the
+	# submit has to be the thing that fails if the batch did not pass.
+	#
+	# Only the finished item is inspected. The components were checked when they arrived,
+	# and checking them again on the way into a mixer is ceremony.
+	if inspection:
+		from fuse_manufacturing import quality
+
+		for line in entry.items:
+			if line.get("is_finished_item"):
+				quality.create_for_line(doc=entry, row=line, captured=inspection)
+
 	entry.submit()
 
 	return {"stock_entry": entry.name, "intacct_key": entry.get("custom_intacct_key")}

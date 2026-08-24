@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:instrument_id",
+ "creation": "2026-08-24 12:00:00.000000",
+ "description": "A meter, balance or probe whose readings appear on a Certificate of Analysis. ISO 9001 clause 7.1.5.2 asks for measurement traceability: a result is only evidence if the instrument that produced it was in calibration at the time. ERPNext has no register for this, so Fuse keeps one.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "instrument_id",
+  "instrument_name",
+  "instrument_type",
+  "column_break_id",
+  "status",
+  "location",
+  "responsible",
+  "calibration_section",
+  "calibrated_on",
+  "calibration_due",
+  "column_break_cal",
+  "calibrated_by",
+  "certificate_no",
+  "certificate",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "instrument_id",
+   "fieldtype": "Data",
+   "label": "Instrument ID",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "The number on the asset label. This is what an auditor traces from a certificate back to the reading."
+  },
+  {
+   "fieldname": "instrument_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "instrument_type",
+   "fieldtype": "Select",
+   "label": "Type",
+   "options": "pH Meter\nConductivity Meter\nBalance\nDensity Meter\nThermometer\nTitrator\nRefractometer\nViscometer\nOther",
+   "in_list_view": 1,
+   "description": "What it measures. Drives nothing on its own — it is here so the register reads as a register."
+  },
+  {
+   "fieldname": "column_break_id",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nOut of Service\nRetired",
+   "default": "Active",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Where it lives"
+  },
+  {
+   "fieldname": "responsible",
+   "fieldtype": "Link",
+   "label": "Responsible",
+   "options": "User"
+  },
+  {
+   "fieldname": "calibration_section",
+   "fieldtype": "Section Break",
+   "label": "Calibration"
+  },
+  {
+   "fieldname": "calibrated_on",
+   "fieldtype": "Date",
+   "label": "Calibrated on"
+  },
+  {
+   "fieldname": "calibration_due",
+   "fieldtype": "Date",
+   "label": "Calibration due",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "An inspection using this instrument is refused after this date. That refusal is the whole point of the register."
+  },
+  {
+   "fieldname": "column_break_cal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "calibrated_by",
+   "fieldtype": "Data",
+   "label": "Calibrated by",
+   "description": "The laboratory or technician. An accredited lab's name belongs here."
+  },
+  {
+   "fieldname": "certificate_no",
+   "fieldtype": "Data",
+   "label": "Certificate number"
+  },
+  {
+   "fieldname": "certificate",
+   "fieldtype": "Attach",
+   "label": "Calibration certificate",
+   "description": "The certificate itself. An auditor asks for this, not for a date somebody typed."
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-24 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse Measuring Instrument",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Quality Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Manufacturing User"
+  }
+ ],
+ "search_fields": "instrument_name,instrument_type,calibration_due",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "instrument_name",
+ "track_changes": 1
+}

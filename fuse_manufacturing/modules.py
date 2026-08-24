@@ -63,6 +63,11 @@ MODULES = [
 		"description": "Move stock between warehouses.",
 	},
 	{
+		"key": "quality",
+		"label": "Quality",
+		"description": "Inspect goods in, batches made and product going out, against the item's own specification. Off means the checks are not enforced anywhere.",
+	},
+	{
 		"key": "picking",
 		"label": "Picking",
 		"description": "Pick and deliver against a mirrored sales order. Relieves stock in Intacct as a shipper — the invoice is still raised there.",
@@ -111,6 +116,10 @@ MODULE_DOCTYPES = {
 	"receiving": ["Purchase Receipt"],
 	"picking": ["Delivery Note"],
 	"works_orders": ["Work Order"],
+	# Quality does not gate a movement document — it gates whether a movement is allowed
+	# to happen without a passing inspection. What the switch withdraws is the ability to
+	# record one at all.
+	"quality": ["Quality Inspection", "Fuse Measuring Instrument"],
 }
 
 # Stock Entry serves three modules at once, so permissions cannot separate them — a

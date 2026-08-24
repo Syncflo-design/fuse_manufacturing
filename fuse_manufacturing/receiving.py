@@ -139,6 +139,11 @@ def order_lines(purchase_order):
 				"bin_tracked": bool(
 					frappe.db.get_value("Item", row.item_code, "custom_intacct_bin_tracked")
 				),
+				# Whether this item is checked on the way in. The item's own specification,
+				# not an Intacct flag — Intacct has no opinion about incoming inspection.
+				"needs_inspection": bool(
+					frappe.db.get_value("Item", row.item_code, "inspection_required_before_purchase")
+				),
 				"intacct_line_key": row.get("custom_intacct_line_recordno"),
 			}
 		)
@@ -313,6 +318,16 @@ def submit_receipt(purchase_order, rows, supplier_delivery_note=None, posting_da
 		frappe.throw("Nothing was captured against this order.")
 
 	receipt.insert()
+
+	# Between insert and submit, deliberately — see picking.submit_delivery for why.
+	from fuse_manufacturing import quality
+
+	quality.attach_inspections(
+		receipt,
+		{row.get("purchase_order_item"): row for row in rows},
+		"purchase_order_item",
+	)
+
 	receipt.submit()
 
 	return {

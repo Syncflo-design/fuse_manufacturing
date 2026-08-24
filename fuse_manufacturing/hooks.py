@@ -30,6 +30,11 @@ after_migrate = "fuse_manufacturing.install.after_install"
 # Client scripts shipped with the app rather than typed into the site, so they survive a
 # rebuild. Both point at the same file: it defines the form behaviour and the list
 # behaviour, and keeping them together means the two cannot drift.
+# The inspection dialog, desk-wide. Four screens call it — receiving and picking at a desk
+# and on a phone, and a production run on the floor — and asking the same question four
+# different ways would produce four different records.
+app_include_js = "/assets/fuse_manufacturing/js/fuse_quality.js"
+
 doctype_js = {"BOM": "public/js/bom_locked.js"}
 doctype_list_js = {"BOM": "public/js/bom_locked.js"}
 
@@ -42,6 +47,8 @@ doc_events = {
 			# A switched-off module refuses its own movements. Permissions cannot separate
 			# them: all three raise a Stock Entry and only the purpose tells them apart.
 			"fuse_manufacturing.postings.block_inactive_module",
+			# 8.5.1: a batch that has not passed its own check does not move on.
+			"fuse_manufacturing.quality.check_inspections",
 		],
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
@@ -52,7 +59,11 @@ doc_events = {
 	# with the posting that replaces it — never one without the other, because a receipt
 	# that submits without posting adds stock Intacct never saw.
 	"Purchase Receipt": {
-		"validate": "fuse_manufacturing.postings.block_inactive_receiving",
+		"validate": [
+			"fuse_manufacturing.postings.block_inactive_receiving",
+			# 8.4: goods from a supplier are accepted only once they have been checked.
+			"fuse_manufacturing.quality.check_inspections",
+		],
 		"on_submit": "fuse_manufacturing.postings.on_purchase_receipt_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_purchase_receipt_cancel",
 	},
@@ -60,9 +71,23 @@ doc_events = {
 	# else — the invoice is raised there against it. Same contract as receiving: Intacct
 	# first, and a rejection rolls the delivery back.
 	"Delivery Note": {
-		"validate": "fuse_manufacturing.postings.block_inactive_picking",
+		"validate": [
+			"fuse_manufacturing.postings.block_inactive_picking",
+			# 8.6: nothing reaches a customer without a passing, authorised inspection.
+			"fuse_manufacturing.quality.check_inspections",
+		],
 		"on_submit": "fuse_manufacturing.postings.on_delivery_note_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_delivery_note_cancel",
+	},
+	# The inspection itself. 7.1.5.2 — the instrument has to have been in calibration on the
+	# day the reading was taken; 8.6 — an outgoing result has to name who authorised the
+	# release. Both are checked before the record can be saved, because a quality record
+	# that can be fixed up afterwards is not a record.
+	"Quality Inspection": {
+		"validate": [
+			"fuse_manufacturing.quality.block_uncalibrated_instrument",
+			"fuse_manufacturing.quality.require_release_authority",
+		],
 	},
 	# Recipes are Intacct kits on a site configured that way, so a BOM built by hand is a
 	# second recipe Intacct has never heard of. Refused at insert; the New button is also
