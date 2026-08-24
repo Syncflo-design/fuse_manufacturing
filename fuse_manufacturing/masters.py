@@ -741,6 +741,167 @@ def _order_templates(company=None):
 	}
 
 
+SO_LINE_FIELDS = [
+	# RECORDNO is the SODOCUMENTENTRY key. A shipper converts line by line against it, the
+	# same way a PO Receiver converts against the ordered line — item code is no substitute,
+	# because the same item can appear on an order twice.
+	"RECORDNO",
+	"DOCHDRID", "DOCPARID", "LINE_NO", "ITEMID", "UNIT", "QTY_REMAINING",
+	"WAREHOUSE.LOCATION_NO", "PRICE",
+]
+SO_HEADER_FIELDS = ["DOCID", "CUSTVENDID", "WHENCREATED", "WHENDUE", "CURRENCY", "STATE"]
+
+
+def _sales_order_templates(company=None):
+	"""Intacct document templates that are sales ORDERS.
+
+	Same test as the purchasing side: DOCCLASS = Order is what separates an order from a
+	quote, a shipper or an invoice. The names differ per client — this company alone has
+	"Sales Order", "Sales Order-Inventory", "Own fulfilment order" and more — so nothing
+	is hardcoded.
+	"""
+	rows = gateway.query("SODOCUMENTPARAMS", ["DOCID", "DOCCLASS", "STATUS"], company=company)
+	return {
+		val(row, "DOCID")
+		for row in rows
+		if (val(row, "DOCCLASS") or "").strip().lower() == "order"
+		and (val(row, "STATUS") or "").strip().lower() == "active"
+	}
+
+
+def sync_sales_orders(company=None):
+	"""Intacct open sales orders → ERPNext Sales Orders.
+
+	Sales orders originate in Intacct. This mirrors them so the warehouse can pick and
+	deliver against a real order, and so committed stock reaches Bin.reserved_qty and shows
+	in demand reporting — the selling-side counterpart of what sync_purchase_orders does for
+	stock on order.
+
+	Quantity is QTY_REMAINING, so an order part-shipped in Intacct shows only what is still
+	to go out. The filter matters for more than tidiness: reading SODOCUMENTENTRY unfiltered
+	times out on a company with any history.
+
+	Nothing is invoiced here. A delivery posts a shipper, which relieves quantity only; the
+	invoice is raised in Intacct against it.
+	"""
+	templates = _sales_order_templates(company)
+	if not templates:
+		return {"skipped": "no active sales order templates in Intacct"}
+
+	rows = gateway.query(
+		"SODOCUMENTENTRY",
+		SO_LINE_FIELDS,
+		filter_xml="<greaterthan><field>QTY_REMAINING</field><value>0</value></greaterthan>",
+		company=company,
+	)
+
+	target = frappe.defaults.get_user_default("Company") or _target_companies(company)[0]
+
+	orders, problems = {}, []
+	for row in rows:
+		if val(row, "DOCPARID") not in templates:
+			continue
+
+		item_code = val(row, "ITEMID")
+		warehouse_id = val(row, "WAREHOUSE.LOCATION_NO")
+
+		# The item decides whether a line is stock at all. A services line has nothing to
+		# pick, and a line with no warehouse has nowhere to pick it from.
+		if not frappe.db.get_value("Item", item_code, "is_stock_item"):
+			continue
+		if not warehouse_id:
+			continue
+
+		warehouse = frappe.db.get_value(
+			"Warehouse", {"custom_intacct_warehouse_id": warehouse_id, "company": target}, "name"
+		)
+		if not warehouse:
+			problems.append(f"{val(row, 'DOCHDRID')}: warehouse {warehouse_id} is not in ERPNext")
+			continue
+
+		orders.setdefault(val(row, "DOCHDRID"), {"lines": []})
+		orders[val(row, "DOCHDRID")]["lines"].append(
+			{
+				"item_code": item_code,
+				"qty": float(val(row, "QTY_REMAINING") or 0),
+				# From the Item, not the order line — the same rule the postings follow.
+				"uom": frappe.db.get_value("Item", item_code, "stock_uom"),
+				"warehouse": warehouse,
+				"rate": float(val(row, "PRICE") or 0),
+				# Carried so a delivery can convert this exact ordered line.
+				"custom_intacct_line_recordno": val(row, "RECORDNO"),
+				"delivery_date": None,  # filled from the header below
+			}
+		)
+
+	headers = {}
+	if orders:
+		for row in gateway.query("SODOCUMENT", SO_HEADER_FIELDS, company=company):
+			if val(row, "DOCID") in orders:
+				headers[val(row, "DOCID")] = row
+
+	created = unchanged = closed = 0
+
+	for doc_id, order in orders.items():
+		header = headers.get(doc_id)
+		if not header:
+			problems.append(f"{doc_id}: no Intacct order header found, skipped")
+			continue
+
+		# Due date, falling back to when the order was raised. ERPNext requires one on
+		# every line, and a delivery date is a promise — reported rather than invented if
+		# neither is readable.
+		due = rules.intacct_date(val(header, "WHENDUE")) or rules.intacct_date(
+			val(header, "WHENCREATED")
+		)
+		if not due:
+			problems.append(f"{doc_id}: no date on the Intacct order, skipped")
+			continue
+		for line in order["lines"]:
+			line["delivery_date"] = due
+
+		customer_id = val(header, "CUSTVENDID")
+		customer = frappe.db.get_value("Customer", {"custom_intacct_customer_id": customer_id}, "name")
+		if not customer:
+			problems.append(
+				f"{doc_id}: customer {customer_id} is not in ERPNext — run the customers sync"
+			)
+			continue
+
+		existing = frappe.db.get_value(
+			"Sales Order", {"custom_intacct_so_id": doc_id, "docstatus": 1}, "name"
+		)
+		if existing:
+			# Mirrored orders are never edited in place: a submitted Sales Order's lines are
+			# not freely editable, and a picked line must not move under the picker's feet.
+			# What changed in Intacct shows up on the next full rebuild, which is a
+			# deliberate operation rather than a nightly surprise.
+			unchanged += 1
+			continue
+
+		doc = frappe.new_doc("Sales Order")
+		doc.customer = customer
+		doc.company = target
+		doc.transaction_date = rules.intacct_date(val(header, "WHENCREATED")) or due
+		doc.delivery_date = due
+		doc.custom_intacct_so_id = doc_id
+		for line in order["lines"]:
+			doc.append("items", line)
+
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+		doc.submit()
+		created += 1
+
+	return {
+		"open_orders": len(orders),
+		"created": created,
+		"unchanged": unchanged,
+		"closed": closed,
+		"problems": problems,
+	}
+
+
 def sync_purchase_orders(company=None):
 	"""Intacct open purchase orders → ERPNext Purchase Orders.
 
@@ -1011,6 +1172,72 @@ def sync_suppliers(company=None):
 	return {"read": len(rows), "created": created, "updated": updated}
 
 
+CUSTOMER_FIELDS = ["RECORDNO", "CUSTOMERID", "NAME", "STATUS", "CURRENCY"]
+
+
+def _root_customer_group():
+	"""A customer group to file mirrored customers under, whatever this site calls it.
+
+	ERPNext ships "All Customer Groups" as the tree root and usually a child called
+	"Commercial", but a site set up in another language or another way has neither. The
+	first non-group row wins, and the root only if there is nothing else — filing them
+	under a group that exists beats creating one Intacct never asked for.
+	"""
+	leaf = frappe.get_all("Customer Group", filters={"is_group": 0}, pluck="name", limit=1)
+	if leaf:
+		return leaf[0]
+	return frappe.get_all("Customer Group", filters={"is_group": 1}, pluck="name", limit=1)[0]
+
+
+def sync_customers(company=None):
+	"""Intacct CUSTOMER → ERPNext Customer.
+
+	Needed before sales orders can be mirrored, and before a delivery can be posted: an
+	ERPNext Sales Order requires a Customer, and Intacct identifies one only by CUSTOMERID.
+
+	Read-only mirror, like every other master. Customers are disabled rather than deleted
+	when Intacct retires them — a customer with sales history cannot be removed, and the
+	history does not stop being true.
+	"""
+	rows = gateway.query("CUSTOMER", CUSTOMER_FIELDS, company=company)
+	group = _root_customer_group()
+
+	created = updated = 0
+	for row in rows:
+		customer_id = val(row, "CUSTOMERID")
+		if not customer_id:
+			continue
+
+		existing = frappe.db.get_value("Customer", {"custom_intacct_customer_id": customer_id}, "name")
+		if existing:
+			doc = frappe.get_doc("Customer", existing)
+			updated += 1
+		else:
+			doc = frappe.new_doc("Customer")
+			created += 1
+
+		doc.customer_name = val(row, "NAME") or customer_id
+		doc.custom_intacct_customer_id = customer_id
+		doc.custom_intacct_recordno = val(row, "RECORDNO")
+		if not doc.customer_group:
+			doc.customer_group = group
+		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
+
+		# Only where the currency exists on the site. Intacct may name one ERPNext has not
+		# been given, and an unknown link fails the whole save for a field nothing depends
+		# on yet.
+		currency = val(row, "CURRENCY")
+		if currency and frappe.db.exists("Currency", currency):
+			doc.default_currency = currency
+
+		if doc.is_new() or _has_changes(doc):
+			doc.save(ignore_permissions=True)
+		elif existing:
+			updated -= 1
+
+	return {"read": len(rows), "created": created, "updated": updated}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Product lines → Item Groups
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1110,6 +1337,11 @@ ITEM_FIELDS = [
 	"ENABLE_EXPIRATION",
 	"UPC",
 	"EAN13",
+	# ERPNext keeps a name AND a longer description; Intacct keeps NAME and this. A
+	# straight mapping, so a company that fills it in gets it on the item, the order line
+	# and the print format. Blank on leadertread-DEV, which is why the column looked
+	# unmapped rather than unused.
+	"EXTENDED_DESCRIPTION",
 	# Intacct's own decimal precision for this item's inventory quantities. ERPNext's
 	# float precision is aligned to the highest one seen rather than guessed — Intacct
 	# is the source for this the same as for everything else.
@@ -1207,6 +1439,13 @@ def sync_items(modified_since=None):
 			doc.item_group = default_group
 
 		doc.item_name = (val(row, "NAME") or item_code)[:140]
+
+		# Only when Intacct holds one. Left alone otherwise rather than filled with a copy
+		# of the name — a description that repeats the line above it is noise on every
+		# document it prints on, and it would also overwrite anything typed here by hand.
+		extended = val(row, "EXTENDED_DESCRIPTION")
+		if extended:
+			doc.description = extended
 		doc.disabled = 0 if (val(row, "STATUS") or "").lower() == "active" else 1
 
 		# Intacct's ITEMTYPE decides whether ERPNext holds stock for the item.
@@ -1980,6 +2219,8 @@ JOBS = {
 	"map_entities": "map_entities",
 	"item_groups": "sync_item_groups",
 	"suppliers": "sync_suppliers",
+	"customers": "sync_customers",
+	"sales_orders": "sync_sales_orders",
 	"purchase_orders": "sync_purchase_orders",
 	"warehouses": "sync_warehouses",
 	"uoms": "sync_uoms",
@@ -2121,17 +2362,16 @@ def scheduled_item_sync():
 
 
 def scheduled_order_sync():
-	"""Hourly. Suppliers first, then open purchase orders.
+	"""Hourly. Both sides of the order book, each behind its own master.
 
-	Stock on order goes stale continuously — Intacct receives against these orders through
-	the day and the outstanding quantity falls with each receipt. An hour behind is
-	immaterial for planning, and the work is small: only lines with quantity remaining are
-	read, and an order that has not changed is left alone.
+	Orders go stale continuously — Intacct receives and ships against them through the day
+	and the outstanding quantity falls with each one. An hour behind is immaterial for
+	planning, and the work is small: only lines with quantity remaining are read.
 
-	Suppliers go first in the SAME job because a purchase order needs one. A supplier added
-	in Intacct this morning would otherwise block its own order until someone noticed.
+	The master goes first in the SAME job as the order that needs it. A supplier or customer
+	added in Intacct this morning would otherwise block its own order until someone noticed.
 
-	Through run_sync so it takes the same lock as every other sync — two jobs opening
+	Through run_sync so each takes the same lock as every other sync — two jobs opening
 	competing Intacct sessions is the thing the lock exists to prevent.
 	"""
 	if not _enabled():
@@ -2139,6 +2379,8 @@ def scheduled_order_sync():
 	return {
 		"suppliers": run_sync("suppliers"),
 		"purchase_orders": run_sync("purchase_orders"),
+		"customers": run_sync("customers"),
+		"sales_orders": run_sync("sales_orders"),
 	}
 
 

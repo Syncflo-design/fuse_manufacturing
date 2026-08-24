@@ -56,6 +56,14 @@ doc_events = {
 		"on_submit": "fuse_manufacturing.postings.on_purchase_receipt_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_purchase_receipt_cancel",
 	},
+	# Goods OUT. A delivery posts a shipper, which relieves quantity in Intacct and nothing
+	# else — the invoice is raised there against it. Same contract as receiving: Intacct
+	# first, and a rejection rolls the delivery back.
+	"Delivery Note": {
+		"validate": "fuse_manufacturing.postings.block_inactive_picking",
+		"on_submit": "fuse_manufacturing.postings.on_delivery_note_submit",
+		"on_cancel": "fuse_manufacturing.postings.on_delivery_note_cancel",
+	},
 	# Recipes are Intacct kits on a site configured that way, so a BOM built by hand is a
 	# second recipe Intacct has never heard of. Refused at insert; the New button is also
 	# hidden, so nobody meets this message by accident.
@@ -95,6 +103,11 @@ fuse_modules = ["fuse_manufacturing.modules.get_modules"]
 # it, so the table grows as apps are added without core learning what a goods receipt
 # is.
 fuse_processes = ["fuse_manufacturing.transactions.get_processes"]
+
+# The user guides this app ships, for the Training page. They travel with the app so a
+# new instance is never installed without help — the old way was an upload per site,
+# and a site nobody uploaded to had an empty Training page.
+fuse_guides = ["fuse_manufacturing.guides.get_guides"]
 
 # What this app does when a switch is toggled: withdraw or restore the doctypes behind it.
 # Core announces the change — it cannot call this app directly, and must not know it is

@@ -31,6 +31,14 @@ PROCESSES = [
 		"required": 1,
 	},
 	{
+		"key": "customer_delivery",
+		"label": "Delivering to a customer",
+		"description": "Converts a sales order into a shipper when goods are picked. Relieves quantity only — the invoice is raised in Intacct against it.",
+		"source": "Order Entry",
+		"seed": None,
+		"required": 1,
+	},
+	{
 		"key": "manufacture_produce",
 		"label": "Production — finished goods in",
 		"description": "The increase leg of a production run. Carries the cost, worked out from what was consumed.",

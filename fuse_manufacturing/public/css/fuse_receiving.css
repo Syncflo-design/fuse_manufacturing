@@ -251,6 +251,14 @@
 
 /* --- empty / done -------------------------------------------------------- */
 
+/* Picking only: less on the shelf than the order is waiting for. Not an error — it is
+   the picker's most common situation and the number they act on, so it is called out
+   rather than left to be spotted by eye. */
+.fr-shortfall {
+	color: #B45309;
+	font-weight: 600;
+}
+
 .fr-empty {
 	padding: 24px;
 	text-align: center;

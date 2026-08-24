@@ -4,11 +4,16 @@ Not a rewrite. It calls ERPNext's own report and returns what that returns, minu
 column or two. Every number, filter and piece of logic is theirs and stays theirs
 through upgrades.
 
-Why it exists: items are mirrored from Intacct, which has no field that maps onto
-ERPNext's Item description, so the Description column is empty on every row of every
-site we run. An always-empty column beside Item Name reads as missing data rather than
-as a field nobody uses — and it cannot be removed from a Script Report by Customise,
-because the columns are built in Python rather than stored on the Report record.
+Why it exists: the Description column sits beside Item Name and is empty on every row.
+Intacct DOES have a field for it — ITEM.EXTENDED_DESCRIPTION, which the item sync now
+maps — but companies that never fill it in get a blank column, and an always-empty
+column reads as missing data rather than as a field nobody uses.
+
+It cannot be removed from a Script Report by Customise: the columns are built in Python,
+not stored on the Report record. Hence this.
+
+If a client does populate extended descriptions, drop "description" from DROP below and
+they get ERPNext's report back, column and all.
 
 Add to DROP rather than editing ERPNext if another column turns out to be dead weight.
 """

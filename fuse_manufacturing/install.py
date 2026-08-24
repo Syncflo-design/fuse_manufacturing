@@ -246,6 +246,97 @@ CUSTOM_FIELDS = {
 			"hidden": 1,
 		},
 	],
+	# ── Selling side ──────────────────────────────────────────────────────────
+	#
+	# Customers and their orders are mirrored from Intacct exactly as suppliers and purchase
+	# orders are. A delivery relieves quantity in Intacct as a SHIPPER, converted from the
+	# ordered line — so the line's RECORDNO matters here for the same reason it does on the
+	# buying side: the same item can appear on an order twice, and item code cannot tell
+	# Intacct which line went out.
+	"Customer": [
+		{
+			"fieldname": "custom_intacct_customer_id",
+			"fieldtype": "Data",
+			"label": "Intacct Customer ID",
+			"insert_after": "customer_name",
+			"read_only": 1,
+			"unique": 1,
+			"description": "CUSTOMERID. The join key for a mirrored sales order and for every delivery posted against it.",
+		},
+		{
+			"fieldname": "custom_intacct_recordno",
+			"fieldtype": "Data",
+			"label": "Intacct Record No",
+			"insert_after": "custom_intacct_customer_id",
+			"read_only": 1,
+			"hidden": 1,
+		},
+	],
+	"Sales Order": [
+		{
+			"fieldname": "custom_intacct_so_id",
+			"fieldtype": "Data",
+			"label": "Intacct Sales Order",
+			"insert_after": "customer",
+			"read_only": 1,
+			"unique": 1,
+			"allow_on_submit": 1,
+			"description": "DOCID of the Intacct sales order this mirrors. These orders are read-only — they exist so the warehouse can pick against a real order and so committed stock reaches demand reporting. Orders are raised in Intacct.",
+		},
+	],
+	"Sales Order Item": [
+		{
+			"fieldname": "custom_intacct_line_recordno",
+			"fieldtype": "Data",
+			"label": "Intacct Line",
+			"insert_after": "item_code",
+			"read_only": 1,
+			"allow_on_submit": 1,
+			"description": "SODOCUMENTENTRY.RECORDNO of the Intacct order line this mirrors. A delivery converts against this key, so a line without it cannot be picked.",
+		},
+	],
+	"Delivery Note": [
+		{
+			"fieldname": "custom_intacct_section",
+			"fieldtype": "Section Break",
+			"label": "Intacct",
+			"insert_after": "posting_time",
+			"collapsible": 1,
+		},
+		{
+			"fieldname": "custom_intacct_key",
+			"fieldtype": "Data",
+			"label": "Intacct Key",
+			"insert_after": "custom_intacct_section",
+			"read_only": 1,
+			"allow_on_submit": 1,
+			"description": "Key of the shipper this delivery created in Intacct. Its presence is what blocks a cancel here — undoing a shipper is a reverse conversion in Intacct, which Fuse does not post.",
+		},
+		{
+			"fieldname": "custom_intacct_posted_on",
+			"fieldtype": "Datetime",
+			"label": "Posted to Intacct",
+			"insert_after": "custom_intacct_key",
+			"read_only": 1,
+			"allow_on_submit": 1,
+		},
+	],
+	"Delivery Note Item": [
+		{
+			"fieldname": "custom_intacct_lot",
+			"fieldtype": "Data",
+			"label": "Lot",
+			"insert_after": "warehouse",
+			"description": "Intacct's lot number for the stock going out on this line, where the item is lot-tracked. Sending a lot for an item Intacct does not track is rejected with BL03001974, so it is only ever sent where the item carries one.",
+		},
+		{
+			"fieldname": "custom_intacct_bin",
+			"fieldtype": "Data",
+			"label": "Bin",
+			"insert_after": "custom_intacct_lot",
+			"description": "The bin the stock is picked from, where the item is bin-enabled. A movement of a bin-enabled item is rejected without one.",
+		},
+	],
 	"Item Group": [
 		{
 			"fieldname": "custom_intacct_product_line",
@@ -391,6 +482,13 @@ ROLE_PERMISSIONS = {
 	# these are orders nobody raises here — only receives against.
 	"Purchase Order": _READ_ONLY,
 	"Supplier": _READ_ONLY,
+	# The selling side of the same arrangement. Goods go OUT here as a Delivery Note, which
+	# posts a shipper; the order and the customer are mirrored, so both are read only —
+	# an edit here would be overwritten by the next sync, and orders are raised in Intacct.
+	# Withdrawn again when the Picking module is switched off.
+	"Delivery Note": _FULL,
+	"Sales Order": _READ_ONLY,
+	"Customer": _READ_ONLY,
 	# READ ONLY DELIBERATELY. Stock Reconciliation does not post to Intacct — it is what
 	# the opening stock sync uses. Create rights here would hand this role a way to change
 	# stock that Intacct never sees, which is the one thing the whole app prevents.

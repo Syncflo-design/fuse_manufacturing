@@ -874,6 +874,268 @@ def on_purchase_receipt_cancel(doc, method=None):
 	)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Picking — goods out to a customer
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def build_sotransaction_xml(*, definition, posting_date, created_from, customer_id, lines,
+                            location_id, reference_no=None, document_no=None):
+	"""A <create_sotransaction> function element for a customer delivery.
+
+	The Order Entry twin of build_potransaction_xml, and the same legacy DTD rules apply:
+	element order is not cosmetic, and a correct element in the wrong place is rejected as
+	a missing one.
+
+	What this posts is a SHIPPER — a definition whose UPDATES_INV is "Quantity". It takes
+	the stock out and does nothing else. No value moves and no receivable is raised: the
+	invoice is a separate Intacct document, raised there against this shipper, which is
+	exactly the split the handover model asks for.
+
+	`created_from` is the source order's full document id ("Sales Order-Inventory-SO0051")
+	and each line carries `sourcelinekey`, the ordered line's RECORDNO. The header link
+	alone is not enough — the same item can legitimately appear on an order twice.
+	"""
+	function = ET.Element("function")
+	transaction = ET.SubElement(function, "create_sotransaction")
+
+	_text(transaction, "transactiontype", definition)
+
+	date = ET.SubElement(transaction, "datecreated")
+	_text(date, "year", posting_date.year)
+	_text(date, "month", posting_date.month)
+	_text(date, "day", posting_date.day)
+
+	_text(transaction, "createdfrom", created_from)
+	_text(transaction, "customerid", customer_id)
+
+	if document_no:
+		_text(transaction, "documentno", document_no)
+	if reference_no:
+		_text(transaction, "referenceno", reference_no)
+
+	items = ET.SubElement(transaction, "sotransitems")
+	for line in lines:
+		item = ET.SubElement(items, "sotransitem")
+		_text(item, "itemid", line["item_id"])
+		_text(item, "warehouseid", line["warehouse_id"])
+		# POSITIVE always — the definition applies its own direction, the same as every
+		# other posting Fuse makes.
+		_text(item, "quantity", line["quantity"])
+		_text(item, "unit", line["unit"])
+		_text(item, "sourcelinekey", line["source_line_key"])
+		_text(item, "locationid", location_id)
+
+		# Bin, lot and serial detail only where the item carries it. A bin-enabled item is
+		# rejected without a bin; a lot sent for an item Intacct does not track is rejected
+		# with BL03001974.
+		if line.get("bin") or line.get("lot") or line.get("serial"):
+			details = ET.SubElement(item, "itemdetails")
+			detail = ET.SubElement(details, "itemdetail")
+			_text(detail, "quantity", line["quantity"])
+			if line.get("lot"):
+				_text(detail, "lotno", line["lot"])
+			if line.get("bin"):
+				_text(detail, "bin", line["bin"])
+			if line.get("serial"):
+				_text(detail, "serialno", line["serial"])
+
+	return function
+
+
+def _delivery_lines(doc):
+	"""The shipper lines for a Delivery Note.
+
+	One line out per picked row. Unlike a receipt there is no rejected quantity to carry —
+	stock either goes to the customer or it does not — so this stays a straight mapping.
+
+	The lot comes from the picker, never from a default: which lot left the building is a
+	fact about what was physically handed over, and inventing it would put the wrong lot on
+	a customer's traceability record. The bin falls back to the warehouse default the way
+	receiving does, because a bin is where stock sits rather than what it is.
+	"""
+	lines = []
+	for row in doc.items:
+		if not row.get("so_detail"):
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}) is not linked to a sales order line. A "
+				"delivery converts an ordered line, so a free-standing row has nothing to "
+				"convert against."
+			)
+
+		source_line_key = frappe.db.get_value(
+			"Sales Order Item", row.so_detail, "custom_intacct_line_recordno"
+		)
+		if not source_line_key:
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}): the ordered line carries no Intacct line "
+				"key. Re-run the sales order sync so the mirror picks it up, then deliver "
+				"again."
+			)
+
+		if flt(row.qty) <= 0:
+			continue
+
+		item = frappe.db.get_value(
+			"Item",
+			row.item_code,
+			["stock_uom", "custom_intacct_lot_tracked", "custom_intacct_bin_tracked"],
+			as_dict=True,
+		)
+
+		lot = row.get("custom_intacct_lot") or None
+		if item.custom_intacct_lot_tracked and not lot:
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}) is lot tracked in Intacct, so the delivery "
+				"has to say which lot went out."
+			)
+
+		bin_id = row.get("custom_intacct_bin") or _default_bin(row.warehouse, row.item_code)
+		if item.custom_intacct_bin_tracked and not bin_id:
+			frappe.throw(
+				f"Row {row.idx} ({row.item_code}) is bin tracked in Intacct and "
+				f"{row.warehouse} has no bin to pick from. Run the bins sync."
+			)
+
+		lines.append(
+			{
+				"item_id": row.item_code,
+				"warehouse_id": _intacct_warehouse(row.warehouse),
+				"quantity": flt(row.qty),
+				"unit": item.stock_uom,
+				"source_line_key": source_line_key,
+				"bin": bin_id,
+				"lot": lot,
+			}
+		)
+
+	if not lines:
+		# Intacct rejects an empty shipper with "sotransitems: Missing child element",
+		# which reads as a malformed request rather than as an empty one.
+		frappe.throw("Nothing on this delivery has a quantity, so there is nothing to ship.")
+
+	return lines
+
+
+@frappe.whitelist()
+def post_delivery_note(delivery_note, dry_run=False):
+	"""Post an ERPNext Delivery Note to Intacct as a shipper.
+
+	`dry_run=True` returns the XML that WOULD be sent, without sending it, and works on a
+	draft — the point is to read the envelope before the document is committed.
+	"""
+	doc = frappe.get_doc("Delivery Note", delivery_note)
+
+	if not dry_run and doc.docstatus != 1:
+		frappe.throw(f"{delivery_note} is not submitted (docstatus {doc.docstatus}).")
+
+	# ERPNext will happily deliver several sales orders on one note. Intacct will not:
+	# `createdfrom` names a single source document. Refused rather than quietly split into
+	# several shippers, because then one of them failing leaves a delivery half posted.
+	orders = {row.against_sales_order for row in doc.items if row.get("against_sales_order")}
+	if len(orders) > 1:
+		frappe.throw(
+			"This delivery covers more than one sales order: "
+			+ ", ".join(sorted(orders))
+			+ ". Intacct ships one order at a time — record a separate delivery for each."
+		)
+	if not orders:
+		frappe.throw("This delivery is not linked to a sales order, so there is nothing to convert.")
+
+	order = orders.pop()
+	created_from = frappe.db.get_value("Sales Order", order, "custom_intacct_so_id")
+	if not created_from:
+		frappe.throw(
+			f"{order} is not a mirrored Intacct order. Only orders that came from Intacct can "
+			"be delivered, because the delivery converts the Intacct document."
+		)
+
+	customer_id = frappe.db.get_value("Customer", doc.customer, "custom_intacct_customer_id")
+	if not customer_id:
+		frappe.throw(f"Customer {doc.customer} has no Intacct customer ID — run the customers sync.")
+
+	entity = gateway.entity_for_company(doc.company)
+	lines = _delivery_lines(doc)
+
+	function = build_sotransaction_xml(
+		definition=mapped_definition("customer_delivery"),
+		posting_date=doc.posting_date,
+		created_from=created_from,
+		customer_id=customer_id,
+		lines=lines,
+		location_id=entity,
+		reference_no=doc.name,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"entity": entity,
+			"created_from": created_from,
+			"lines": lines,
+			"xml": ET.tostring(function, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[function],
+		company=doc.company,
+		reference=("Delivery Note", doc.name),
+		purpose="delivery",
+	)
+	return {"posted": True, "intacct_key": keys[0], "lines": len(lines)}
+
+
+def on_delivery_note_submit(doc, method=None):
+	"""Post the delivery to Intacct as part of submitting it.
+
+	Same contract as every other movement: Intacct first, inside ERPNext's submit
+	transaction, so a rejection rolls the delivery back and no stock leaves here that
+	Intacct has not accepted.
+	"""
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.post_movements:
+		# Deliberately off — a site syncs masters long before it is ready to post.
+		return
+
+	result = post_delivery_note(doc.name)
+	doc.db_set("custom_intacct_key", result.get("intacct_key"))
+	doc.db_set("custom_intacct_posted_on", frappe.utils.now_datetime())
+
+
+def on_delivery_note_cancel(doc, method=None):
+	"""Refuse to cancel a delivery that has already posted.
+
+	Undoing a shipper is a reverse conversion in Intacct, and how this company's definitions
+	handle one has not been established. Refusing is the honest answer while that is unknown:
+	a local cancel would put stock back in ERPNext that Intacct still believes went to a
+	customer — and that customer may already have been invoiced for it.
+	"""
+	if not doc.get("custom_intacct_key"):
+		return
+	frappe.throw(
+		f"{doc.name} was shipped in Intacct (key {doc.custom_intacct_key}) and cannot be "
+		"cancelled here. Reverse the shipper in Intacct first — Fuse does not yet post a "
+		"reverse conversion."
+	)
+
+
+def block_inactive_picking(doc, method=None):
+	"""Refuse a delivery when the client has switched Picking off.
+
+	Permissions could withdraw Delivery Note outright, and they do — this is the guard for
+	someone who holds it through another role, the same reasoning as the movement modules.
+	"""
+	from fuse_manufacturing import modules
+
+	if modules.is_active("picking"):
+		return
+	frappe.throw(
+		"Picking is switched off for this site, so a delivery cannot be recorded.\n\n"
+		"An administrator can switch it back on under Active Modules in Intacct Settings.",
+		title="Picking is switched off",
+	)
+
+
 def block_inactive_module(doc, method=None):
 	"""Refuse a movement whose module the client has switched off.
 

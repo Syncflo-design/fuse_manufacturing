@@ -16,7 +16,7 @@ frappe.pages['fuse-floor'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	var BUILD_MARKER = 'v0.7.1-2026-08-23-receiving-first';
+	var BUILD_MARKER = 'v0.8.0-2026-08-24-picking';
 	console.log('Fuse Shop Floor loaded:', BUILD_MARKER);
 
 	if (!document.getElementById('fuse-floor-stylesheet')) {
@@ -202,6 +202,7 @@ FuseFloor.prototype.home = function () {
 		// Receiving first: it is the start of the day and the start of the process, and it
 		// is the tile reached most often — stock arrives more times than it is made.
 		ff_tile('receive', 'receive', 'Receiving', 'Book a delivery in against a purchase order'),
+		ff_tile('pick', 'transfer', 'Picking', 'Send goods out against a customer order'),
 		ff_tile('run', 'orders', 'Works Orders', 'Record what you made against a works order'),
 		ff_tile('wip', 'wip', 'Issue to WIP', 'Move components from a store onto the floor'),
 		ff_tile('move', 'transfer', 'Item Transfer', 'Warehouse to warehouse'),
@@ -220,6 +221,7 @@ FuseFloor.prototype.home = function () {
 		if (go === 'run') self.work_orders();
 		else if (go === 'wip') self.transfer(FF_WIP);
 		else if (go === 'receive') self.receiving();
+		else if (go === 'pick') self.picking();
 		else self.transfer(FF_MOVE);
 	});
 };
@@ -1151,6 +1153,416 @@ FuseFloor.prototype.send_receipt = function (values, confirmed) {
 			self.done(
 				{ stock_entry: result.purchase_receipt, intacct_key: result.intacct_key },
 				'Delivery booked in.'
+			);
+		}
+	});
+};
+
+// ---------------------------------------------------------------------------
+// Picking — goods out to a customer. The mirror of receiving, and deliberately
+// the same three moves: find the order, say what is going, confirm.
+// ---------------------------------------------------------------------------
+
+FuseFloor.prototype.picking = function (term) {
+	var self = this;
+	this.pick = [];
+
+	frappe.call({
+		method: 'fuse_manufacturing.picking.open_orders',
+		args: { term: term || '' },
+		freeze: true,
+		freeze_message: 'Loading orders',
+		callback: function (r) {
+			var orders = (r && r.message) || [];
+
+			var html = [
+				self.header_html('Picking', 'Deliveries against a customer order'),
+				ff_step(1, 3, 'Find the order'),
+				'<div class="ff-scan">',
+				ff_icon('scan'),
+				'  <input class="ff-input" data-scan="1" placeholder="Scan or type an order number" ',
+				'         autocomplete="off" autocapitalize="off" spellcheck="false" value="' + ff_escape(term || '') + '">',
+				'</div>'
+			];
+
+			if (!orders.length) {
+				html.push(
+					'<div class="ff-empty">' +
+					(term ? 'No open order matches “' + ff_escape(term) + '”.' : 'No orders are waiting to go out.') +
+					'</div>'
+				);
+			} else {
+				html.push('<div class="ff-list">');
+				orders.forEach(function (order) {
+					html.push(
+						'<button class="ff-row" data-order="' + ff_escape(order.name) + '">' +
+						'  <span class="ff-row-main">' + ff_escape(order.custom_intacct_so_id || order.name) + '</span>' +
+						'  <span class="ff-row-sub">' + ff_escape(order.customer_name || order.customer) + '</span>' +
+						'  <span class="ff-row-qty">' + ff_qty(order.per_delivered) + '%<br>out</span>' +
+						'</button>'
+					);
+				});
+				html.push('</div>');
+			}
+
+			self.render(html.join('\n'));
+			self.bind_back();
+
+			// Searching the list and scanning the order number are the same action, so
+			// they are the same box. Enter searches; an exact match opens straight away.
+			self.$root.find('[data-scan]').on('keydown', function (e) {
+				if (e.which !== 13) return;
+				e.preventDefault();
+
+				var typed = ($(this).val() || '').trim();
+				var hit = null;
+				orders.forEach(function (order) {
+					var ours = (order.name || '').toLowerCase();
+					var theirs = (order.custom_intacct_so_id || '').toLowerCase();
+					if (ours === typed.toLowerCase() || theirs === typed.toLowerCase()) hit = order;
+				});
+
+				if (hit) {
+					self.pick_order(hit.name);
+					return;
+				}
+				self.picking(typed);
+			});
+
+			self.$root.find('[data-order]').on('click', function () {
+				self.pick_order($(this).data('order'));
+			});
+		}
+	});
+};
+
+FuseFloor.prototype.pick_order = function (sales_order) {
+	var self = this;
+
+	frappe.call({
+		method: 'fuse_manufacturing.picking.order_lines',
+		args: { sales_order: sales_order },
+		freeze: true,
+		freeze_message: 'Opening the order',
+		callback: function (r) {
+			if (!r || !r.message) return;
+			self.order = r.message;
+			self.pick = [];
+			self.paint_picking();
+		}
+	});
+};
+
+FuseFloor.prototype.paint_picking = function () {
+	var self = this;
+	var order = this.order;
+
+	var html = [
+		this.header_html('Picking', (order.intacct_so || order.sales_order) + ' · ' + order.customer),
+		ff_step(2, 3, 'Pick the goods')
+	];
+
+	if (!order.posting_on) {
+		html.push(
+			'<div class="ff-warn">' + ff_icon('warn') +
+			'<span>Posting to Intacct is off. Stock leaves here and nowhere else.</span></div>'
+		);
+	}
+
+	html.push(
+		'<div class="ff-scan">',
+		ff_icon('scan'),
+		'  <input class="ff-input" data-scan="1" placeholder="Scan an item on this order" ',
+		'         autocomplete="off" autocapitalize="off" spellcheck="false">',
+		'</div>',
+		'<div class="ff-list">'
+	);
+
+	order.lines.forEach(function (line) {
+		var picked = self.picked_for(line.sales_order_item);
+		var left = flt(line.outstanding) - picked;
+		// What is on the shelf, when it is less than what is being asked for. The picker
+		// is going to find this out at the rack anyway — better on the screen first.
+		var short = flt(line.available) < left;
+
+		html.push(
+			'<button class="ff-row" data-line="' + ff_escape(line.sales_order_item) + '">' +
+			'  <span class="ff-row-main">' + ff_escape(line.item_code) + '</span>' +
+			'  <span class="ff-row-sub">' + ff_escape(line.item_name || '') +
+			(picked ? ' · <b>' + ff_qty(picked) + ' picked</b>' : '') +
+			(short ? ' · only ' + ff_qty(line.available) + ' on hand' : '') + '</span>' +
+			'  <span class="ff-row-qty">' + ff_qty(left) + '<br>' + ff_escape(line.uom) + '</span>' +
+			'</button>'
+		);
+	});
+
+	html.push('</div>');
+	html.push(
+		'<div class="ff-actions">',
+		'  <button class="ff-submit" data-submit="1"' + (this.pick.length ? '' : ' disabled') + '>' +
+		(this.pick.length
+			? 'Finish ' + this.pick.length + (this.pick.length === 1 ? ' line' : ' lines')
+			: 'Nothing picked yet') +
+		'</button>',
+		'</div>'
+	);
+
+	this.render(html.join('\n'));
+	this.bind_back(function () {
+		self.picking();
+	});
+
+	this.$root.find('[data-line]').on('click', function () {
+		self.ask_pick($(this).data('line'));
+	});
+
+	this.$root.find('[data-scan]').on('keydown', function (e) {
+		if (e.which !== 13) return;
+		e.preventDefault();
+		self.scan_into_pick($(this).val());
+		$(this).val('');
+	});
+
+	this.$root.find('[data-submit]').on('click', function () {
+		if (self.pick.length) self.finish_pick();
+	});
+
+	this.focus_scan();
+};
+
+// How much is already picked against an ordered line in this session.
+FuseFloor.prototype.picked_for = function (so_item) {
+	var total = 0;
+	(this.pick || []).forEach(function (row) {
+		if (row.sales_order_item === so_item) total += flt(row.qty);
+	});
+	return total;
+};
+
+FuseFloor.prototype.pick_line_by_id = function (so_item) {
+	var found = null;
+	this.order.lines.forEach(function (line) {
+		if (line.sales_order_item === so_item) found = line;
+	});
+	return found;
+};
+
+FuseFloor.prototype.scan_into_pick = function (term) {
+	var self = this;
+	term = (term || '').trim();
+	if (!term) return;
+
+	frappe.call({
+		method: 'fuse_manufacturing.picking.scan',
+		args: { sales_order: this.order.sales_order, term: term },
+		freeze: true,
+		freeze_message: 'Reading ' + term,
+		callback: function (r) {
+			var result = (r && r.message) || {};
+			var scanned = result.scan || {};
+
+			// Anything that is not an item is reported for what it was, rather than as
+			// "not found" — scanning a bin label at the wrong moment is a normal mistake
+			// and the picker should be told what they actually scanned.
+			if (scanned.type !== 'item') {
+				frappe.msgprint(scanned.label || 'That is not an item on this order.');
+				self.focus_scan();
+				return;
+			}
+
+			if (!result.lines || !result.lines.length) {
+				frappe.msgprint(result.message || 'That item is not on this order.');
+				self.focus_scan();
+				return;
+			}
+
+			// One ordered line is the normal case. Several means the same item was ordered
+			// twice, and only the picker knows which one this is going against.
+			if (result.lines.length === 1) {
+				self.ask_pick(result.lines[0].sales_order_item);
+				return;
+			}
+			self.choose_pick_line(result.lines);
+		}
+	});
+};
+
+FuseFloor.prototype.choose_pick_line = function (lines) {
+	var self = this;
+	var dialog = new frappe.ui.Dialog({ title: 'Which line?' });
+	var $body = $(dialog.body).empty();
+
+	lines.forEach(function (line) {
+		var $row = $(
+			'<button type="button" class="ff-row ff-row-choice">' +
+			'  <span class="ff-row-main"></span>' +
+			'  <span class="ff-row-sub"></span>' +
+			'</button>'
+		);
+		$row.find('.ff-row-main').text(line.item_code);
+		$row.find('.ff-row-sub').text(
+			ff_qty(line.outstanding) + ' ' + (line.uom || '') + ' to pick · ' + (line.warehouse || '')
+		);
+		$row.on('click', function () {
+			dialog.hide();
+			self.ask_pick(line.sales_order_item);
+		});
+		$body.append($row);
+	});
+
+	dialog.show();
+};
+
+FuseFloor.prototype.ask_pick = function (so_item) {
+	var self = this;
+	var line = this.pick_line_by_id(so_item);
+	if (!line) {
+		frappe.msgprint('That line is not on this order.');
+		return;
+	}
+
+	var picked = this.picked_for(so_item);
+	var left = flt(line.outstanding) - picked;
+
+	var fields = [
+		{
+			fieldname: 'summary',
+			fieldtype: 'HTML',
+			options: [
+				'<div class="ff-onhand">',
+				ff_escape(line.item_name || ''),
+				'<br>Ordered <b>' + ff_qty(line.ordered) + '</b>,',
+				' delivered <b>' + ff_qty(line.delivered) + '</b>,',
+				' <b>' + ff_qty(left) + ' ' + ff_escape(line.uom) + '</b> to pick.',
+				'<br>On hand in ' + ff_escape(line.warehouse) + ': <b>' + ff_qty(line.available) + '</b>',
+				'</div>'
+			].join('')
+		},
+		{
+			fieldname: 'qty',
+			fieldtype: 'Float',
+			label: 'Picking (' + line.uom + ')',
+			default: left > 0 ? left : 0,
+			reqd: 1
+		}
+	];
+
+	// Only where Intacct tracks lots on this item. Asking otherwise invites a number that
+	// Intacct then rejects the whole delivery for. Required where it does track: which lot
+	// left the building is a fact about what was handed over, and it cannot be guessed.
+	if (line.needs_lot) {
+		fields.push({
+			fieldname: 'lot',
+			fieldtype: 'Data',
+			label: 'Lot number',
+			reqd: 1
+		});
+	}
+
+	// Bins are where stock sits rather than what it is, so an empty box means "the
+	// warehouse default", which is what the posting falls back to.
+	if (line.needs_bin) {
+		fields.push({
+			fieldname: 'bin',
+			fieldtype: 'Data',
+			label: 'Bin',
+			description: 'Leave empty to use the warehouse default.'
+		});
+	}
+
+	var dialog = new frappe.ui.Dialog({
+		title: line.item_code,
+		fields: fields,
+		primary_action_label: 'Pick',
+		primary_action: function (values) {
+			var qty = flt(values.qty);
+
+			if (qty <= 0) {
+				frappe.msgprint('Enter what is going out.');
+				return;
+			}
+
+			dialog.hide();
+			self.pick.push({
+				sales_order_item: so_item,
+				item_code: line.item_code,
+				qty: qty,
+				warehouse: line.warehouse,
+				lot: values.lot || null,
+				bin: values.bin || null
+			});
+			self.paint_picking();
+		}
+	});
+
+	dialog.show();
+	setTimeout(function () {
+		dialog.get_field('qty').$input.focus().select();
+	}, 150);
+};
+
+FuseFloor.prototype.finish_pick = function () {
+	var self = this;
+
+	var dialog = new frappe.ui.Dialog({
+		title: 'Finish the delivery',
+		fields: [
+			{
+				fieldname: 'posting_date',
+				fieldtype: 'Date',
+				label: 'Delivered on',
+				default: frappe.datetime.get_today(),
+				reqd: 1
+			}
+		],
+		primary_action_label: 'Record',
+		primary_action: function (values) {
+			dialog.hide();
+			self.send_pick(values, false);
+		}
+	});
+
+	dialog.show();
+};
+
+FuseFloor.prototype.send_pick = function (values, confirmed) {
+	var self = this;
+
+	frappe.call({
+		method: 'fuse_manufacturing.picking.submit_delivery',
+		args: {
+			sales_order: this.order.sales_order,
+			rows: JSON.stringify(this.pick),
+			posting_date: values.posting_date,
+			confirm_over_delivery: confirmed ? 1 : 0
+		},
+		freeze: true,
+		freeze_message: 'Sending to Intacct…',
+		callback: function (r) {
+			var result = (r && r.message) || {};
+
+			// More is going out than was ordered. Nothing has been written — the picker is
+			// told which line and by how much, and decides.
+			if (result.confirm_required === 'over_delivery') {
+				var lines = (result.over || []).map(function (row) {
+					return row.item_code + ': ' + ff_qty(row.picked) +
+						' against ' + ff_qty(row.outstanding) + ' outstanding' +
+						' (' + ff_qty(row.excess) + ' over)';
+				});
+				frappe.confirm(
+					'More is going out than this order expects:<br><br><b>' +
+					lines.join('<br>') + '</b><br><br>Record it anyway?',
+					function () {
+						self.send_pick(values, true);
+					}
+				);
+				return;
+			}
+
+			if (!result.delivery_note) return;
+			self.done(
+				{ stock_entry: result.delivery_note, intacct_key: result.intacct_key },
+				'Delivery recorded.'
 			);
 		}
 	});
