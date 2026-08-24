@@ -30,7 +30,7 @@ MODULES = [
 	{
 		"key": "material_request",
 		"label": "Material Request",
-		"description": "Ask for what the floor needs — the requisition that starts a purchase.",
+		"description": "Request material to buy, move between warehouses, or make. The requisition step, raised by stores, a planner or the floor.",
 	},
 	{
 		"key": "receiving",
