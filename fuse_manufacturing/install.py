@@ -412,7 +412,7 @@ ROLE_PERMISSIONS = {
 # Query reports carry their own role list, separate from DocType permissions. These are the
 # three on the Stock Control workspace.
 ROLE_REPORTS = (
-	"Stock Balance", "Stock Ledger", "Stock Projected Qty",
+	"Stock Balance", "Stock Ledger", "Stock Projected Qty", "Projected Stock",
 	# Ours. Carries its own roles in the report definition, but granting here too means a
 	# site that had the role before the report arrived still ends up with access.
 	"Stock on Order",
