@@ -48,11 +48,6 @@ MODULES = [
 		"description": "Explode demand through the BOMs and raise the works orders and material requests it calls for.",
 	},
 	{
-		"key": "picking",
-		"label": "Picking",
-		"description": "Pick and deliver against a mirrored sales order. Relieves stock in Intacct as a shipper — the invoice is still raised there.",
-	},
-	{
 		"key": "works_orders",
 		"label": "Works Orders",
 		"description": "Record production against a works order.",
@@ -66,6 +61,11 @@ MODULES = [
 		"key": "item_transfer",
 		"label": "Item Transfer",
 		"description": "Move stock between warehouses.",
+	},
+	{
+		"key": "picking",
+		"label": "Picking",
+		"description": "Pick and deliver against a mirrored sales order. Relieves stock in Intacct as a shipper — the invoice is still raised there.",
 	},
 	{
 		# Off unless asked for. It lands on the same subject as Stock Control, which is the
