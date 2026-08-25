@@ -444,7 +444,7 @@ CUSTOM_FIELDS = {
 			"label": "Use Simple Warehouse Transfer",
 			"default": "0",
 			"insert_after": "movements_section",
-			"description": "On: the Item Transfer tile opens Fuse's own transfer screen: a from, a to and a list of items, with the item picker limited to what the source warehouse actually holds. Off: it opens ERPNext's Stock Entry form, which does the same job with every field a Stock Entry can have.\n\nBoth post identically. This is about what the person moving the stock has to look at, not about what reaches Intacct.",
+			"description": "On: the Warehouse Transfer tile opens Fuse's own transfer screen: a from, a to and a list of items, with the item picker limited to what the source warehouse actually holds. Off: it opens ERPNext's Stock Entry form, which does the same job with every field a Stock Entry can have.\n\nBoth post identically. This is about what the person moving the stock has to look at, not about what reaches Intacct.",
 		},
 		{
 			"fieldname": "defaults_section",
@@ -510,6 +510,11 @@ ROLE_PERMISSIONS = {
 	# forgotten.
 	"Stock Entry": _FULL,
 	"Work Order": _FULL,
+	# Fuse's own movement screens. Withdrawn again when their modules are switched off —
+	# unlike Stock Entry, which serves three modules at once and so has to be guarded in
+	# code instead.
+	"Fuse Stock Transfer": _FULL,
+	"Fuse Bin Transfer": _FULL,
 	# Intacct owns these. Read is needed to raise the documents above; write is not, and an
 	# edit would be overwritten by the next masters sync anyway.
 	"Item": _READ_ONLY,

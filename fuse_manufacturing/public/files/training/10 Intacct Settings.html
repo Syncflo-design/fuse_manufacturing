@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intacct Settings — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 10</p>
+	<h1>Intacct Settings</h1>
+	
+</header>
+<main>
+<p><em>The connection to Sage Intacct, and what each part of it controls — Fuse Manufacturing
+administrator guide 10</em></p>
+<blockquote>
+<p>This guide is for administrators. <strong>Do not share screenshots of this page without
+blanking the credential fields first.</strong></p>
+</blockquote>
+<h2>Before you start</h2>
+<h3>What this page is</h3>
+<p>One page holding everything Fuse needs to talk to Sage Intacct, plus the few choices
+that cannot be read from Intacct.</p>
+<p>The governing rule is worth knowing before you change anything: <strong>Intacct is the golden
+source.</strong> Almost everything here is either a credential or a mapping onto something
+Intacct already holds. Where Fuse can read a value from Intacct, it does — it does not
+ask you to type it.</p>
+<p>Find it by typing <strong>Intacct Settings</strong> in the search bar.</p>
+<h2>Enabled, and Post Stock Movements</h2>
+<p>Two switches at the top, and they do different jobs.</p>
+<p><strong>Enabled</strong> is the master switch. With it off, every call to Intacct raises an error
+instead of going out. Use it when the connection must be stopped entirely.</p>
+<p><strong>Post Stock Movements to Intacct</strong> controls whether movements are sent. With it off,
+Fuse records stock locally and Intacct hears nothing. That is the right setting while a
+new site is syncing its masters and nobody should be posting yet — and the wrong setting
+for a live site, because the two systems then drift apart silently.</p>
+<p>The shop floor screens show a red banner whenever it is off, so an operator is never
+recording into a system that is not posting without being told.</p>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">top of Intacct Settings</span></figure>
+<h2>Credentials</h2>
+<p>Five values, in two groups: the <strong>sender</strong> pair identifies Fuse to the Intacct gateway,
+and the <strong>company</strong> trio identifies which Intacct company to sign into.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sender ID / Sender Password</td>
+<td>Issued by Sage for the gateway itself</td>
+</tr>
+<tr>
+<td>Company ID</td>
+<td>The Intacct company, e.g. a live company or an <code>-imp</code> test one</td>
+</tr>
+<tr>
+<td>User ID / User Password</td>
+<td>The Intacct web services user Fuse signs in as</td>
+</tr>
+</tbody>
+</table></div>
+<p>These come from whoever administers your Intacct company. <strong>They are never written down
+in a document, an email or a chat message</strong> — including this guide.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">the Credentials section with every value obscured before sharing</span></figure>
+<h2>Entity</h2>
+<p><strong>Entity ID (locationid)</strong> is the Intacct entity Fuse signs into, and it is sent on
+every request.</p>
+<p>It matters more than it looks. Intacct's manufacturing definitions are set to "Entity
+only", so signing in at the top level is rejected — with an error that reads like a
+credentials problem rather than an entity one. The entity also differs between
+companies: a test company and a live one will not share the same value.</p>
+<h2>Defaults</h2>
+<p><strong>Default Item Group</strong> — Intacct has no concept that maps onto ERPNext item groups, so
+synced items land here.</p>
+<p><strong>Receiving Rejects Warehouse</strong> — where damaged goods go when a delivery is received.
+This is the one field on the page not read from Intacct: Intacct does not record which
+of its warehouses is the reject one, so it is a Fuse routing choice. The warehouse itself
+still comes from Intacct like every other.</p>
+<p>Leave it empty and receiving refuses a rejected quantity, rather than quietly putting
+damaged stock back into good stock.</p>
+<h2>Transactions</h2>
+<p>Which Intacct definition each Fuse process posts to.</p>
+<p>Every Intacct company names these differently. Leadertread's goods receipt is called
+<em>Goods received voucher</em>; another company calls the same thing something else entirely.
+A name that is right for one client is simply wrong for the next, and the rejection it
+causes names no field — so nothing here is defaulted from another client.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Process</td>
+<td>The Fuse job — receiving, the production legs, and so on</td>
+</tr>
+<tr>
+<td>Intacct Definition</td>
+<td>Which of this company's definitions it posts</td>
+</tr>
+<tr>
+<td>What it posts</td>
+<td>Plain English description of the document created</td>
+</tr>
+</tbody>
+</table></div>
+<p>The picker lists what <strong>this</strong> company actually has. If it is empty, the definitions have
+not been read yet — run the definitions sync (below) and they appear.</p>
+<p><strong>A process with nothing mapped refuses to post.</strong> That is deliberate: the alternative is
+sending a definition name borrowed from somebody else's company.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">process rows with the definition picker open</span></figure>
+<h2>Active Modules</h2>
+<p>Which parts of Fuse this client uses. Untick one and its tile disappears from Fuse Home,
+the role loses access to the documents behind it, and the action itself refuses with a
+message naming the module.</p>
+<p>Switching a module off is safe and reversible — nothing is deleted, and ticking it again
+restores access immediately.</p>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">the module list with the tick column</span></figure>
+<h2>Tuning and Status</h2>
+<p><strong>Query Page Size</strong> — how many records are read per request. Intacct's own guidance is
+to stay under about 1000; larger pages tend to time out rather than fail cleanly.</p>
+<p><strong>Max Attempts</strong> — how many times a transient failure is retried. A genuine rejection is
+never retried.</p>
+<p><strong>Request Timeout</strong> — seconds before a call is abandoned.</p>
+<p>The <strong>Status</strong> section is read-only and shows when the last sync ran and what it
+returned. It is the first place to look when data seems stale.</p>
+<h2>Keeping it in step</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>masters.sync_transaction_definitions</code></td>
+<td>Reads this company's definitions so the Transactions picker is populated</td>
+</tr>
+<tr>
+<td><code>masters.sync_purchase_orders</code></td>
+<td>Refreshes mirrored orders and their line keys</td>
+</tr>
+<tr>
+<td><code>masters.sync_items</code></td>
+<td>Items, barcodes and tracking flags — runs hourly</td>
+</tr>
+<tr>
+<td><code>install.after_install</code></td>
+<td>Re-applies fields, roles and the settings tables. Safe to run at any time</td>
+</tr>
+</tbody>
+</table></div>
+<h2>If something goes wrong</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>What you see</th>
+<th>What it means and what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No Intacct definition is mapped for a process</td>
+<td>Set it under Transactions. If the picker is empty, run the definitions sync first.</td>
+</tr>
+<tr>
+<td>Login rejected, BL01001973</td>
+<td>The entity is missing or wrong. Manufacturing definitions are entity-only.</td>
+</tr>
+<tr>
+<td>A movement recorded but nothing in Intacct</td>
+<td>Post Stock Movements is off.</td>
+</tr>
+<tr>
+<td>The Transactions picker is empty</td>
+<td>The definitions have never been read for this company.</td>
+</tr>
+<tr>
+<td>Everything worked yesterday, nothing today</td>
+<td>Check Status for the last sync result before changing any setting.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Quick reference</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stop all Intacct traffic</td>
+<td>Untick Enabled</td>
+</tr>
+<tr>
+<td>Stop posting but keep syncing</td>
+<td>Untick Post Stock Movements</td>
+</tr>
+<tr>
+<td>Point receiving at the right document</td>
+<td>Transactions → Receiving goods</td>
+</tr>
+<tr>
+<td>Turn a feature off for this client</td>
+<td>Active Modules</td>
+</tr>
+<tr>
+<td>Send damaged goods somewhere</td>
+<td>Defaults → Receiving Rejects Warehouse</td>
+</tr>
+</tbody>
+</table></div>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

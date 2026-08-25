@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Floor Screens — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 09</p>
+	<h1>Shop Floor Screens</h1>
+	<p class="standfirst">Fuse on a phone or tablet — Fuse Manufacturing user guide 09</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What these screens are</h3>
+<p>The same jobs as the desk forms, shaped for someone standing at a machine with gloves
+on: big buttons, one thing per screen, and a box that takes a scan.</p>
+<p>Nothing here is a different system. A batch confirmed on a phone creates exactly the
+same document as one confirmed at a desk, and it reaches Sage Intacct the same way.</p>
+<h3>Getting to them</h3>
+<p>On a phone, open Fuse and go to <strong>Shop Floor</strong>. There are four things you can do:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Works Orders</strong></td>
+<td>Record what you made against a works order</td>
+</tr>
+<tr>
+<td><strong>Issue to WIP</strong></td>
+<td>Move components from a store onto the floor</td>
+</tr>
+<tr>
+<td><strong>Item Transfer</strong></td>
+<td>Move stock between warehouses</td>
+</tr>
+<tr>
+<td><strong>Receiving</strong></td>
+<td>Book a delivery in against a purchase order</td>
+</tr>
+</tbody>
+</table></div>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">/app/fuse-floor on a phone-width screen, four tiles</span></figure>
+<h3>Installing it as an app</h3>
+<p>You do not have to find it in a browser every time.</p>
+<ul>
+<li><strong>Android:</strong> open the Shop Floor screen in Chrome, then Chrome's menu → <strong>Install app</strong>
+  (or <em>Add to Home screen</em>). You get a Fuse icon that opens straight to these screens.</li>
+<li><strong>iPhone / iPad:</strong> Safari's share button → <strong>Add to Home Screen</strong>.</li>
+</ul>
+<p>Once installed it opens in its own window with no address bar, which is a lot more usable
+at arm's length.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">home screen showing the Fuse icon</span></figure>
+<h3>The red banner</h3>
+<p>If a red banner says posting to Intacct is switched off, stop and tell your supervisor.
+Anything recorded while it is showing moves stock in Fuse and nowhere else.</p>
+<h2>Works Orders — recording production</h2>
+<ol>
+<li>Tap <strong>Works Orders</strong>. The open orders are listed with how much is still to make.</li>
+<li>Tap the order, or scan its number if it is printed on the job card.</li>
+<li>Enter <strong>how much you actually made</strong>. It can be less than the order.</li>
+<li>Fuse works out the components from the recipe and shows them.</li>
+<li><strong>Correct anything that differed.</strong> What is shown is what the recipe says; what you
+   record should be what really went in. Setting a component to zero drops it.</li>
+<li>Tap <strong>Record the run</strong>.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">the component list with editable quantities</span></figure>
+<p>The finished cost is worked out from what was actually consumed. Accept the recipe when
+it was not followed and the cost is wrong from that point on, with nobody downstream able
+to tell.</p>
+<p>You do not have to record a whole order at once. Record 40 of 100 and the order stays
+open with 60 to go.</p>
+<h2>Issue to WIP and Item Transfer</h2>
+<p>Both move stock, and both work the same way.</p>
+<ol>
+<li>Choose the <strong>From</strong> and <strong>To</strong> warehouses. Your last choice is remembered, so the
+   second move of a shift is far quicker.</li>
+<li><strong>Scan or type an item.</strong> One match goes straight to the quantity; several show a list.</li>
+<li>Enter the quantity and tap <strong>Add</strong>. The line joins the list at the bottom.</li>
+<li>Add as many items as you need, then tap <strong>Record</strong>.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">the basket with two or three lines and the Record button</span></figure>
+<p>Tap the × on a line to take it off before recording.</p>
+<h2>Receiving</h2>
+<p>Covered in full in guide 06. On a phone it is the same three steps: find the order,
+scan the items in, then finish with the delivery note number.</p>
+<h2>If something goes wrong</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>What you see</th>
+<th>What it means and what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nothing matches what you scanned</td>
+<td>The code is not an item, or not one this screen can use. Check you scanned the right label.</td>
+</tr>
+<tr>
+<td>That item is not on this order</td>
+<td>You are receiving, and the scanned item was not ordered on the order you opened.</td>
+</tr>
+<tr>
+<td>From and to are the same warehouse</td>
+<td>Choose a different destination.</td>
+</tr>
+<tr>
+<td>Not enough stock</td>
+<td>The item is not in the source warehouse in that quantity. If components were issued to the floor, they are in a WIP warehouse, not the store.</td>
+</tr>
+<tr>
+<td>The green button is greyed out</td>
+<td>Nothing has been added yet.</td>
+</tr>
+<tr>
+<td>Posting to Intacct is switched off</td>
+<td>Stop and tell your supervisor.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Two rules that apply to everything in Fuse</h2>
+<h3>It is not recorded until you tap the green button</h3>
+<p>Everything you add is held on the screen until then. Nothing has moved.</p>
+<h3>Cancel, never delete</h3>
+<p>If you record something wrongly, tell your supervisor. Movements are reversed in Intacct
+first so both systems return to where they were — entering an opposite movement instead
+leaves two wrong movements in the history rather than none.</p>
+<h2>Quick reference</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Do I need a scanner?</td>
+<td>No. Every screen takes a typed code as well.</td>
+</tr>
+<tr>
+<td>Why does it remember my warehouses?</td>
+<td>So the second job of a shift is three taps.</td>
+</tr>
+<tr>
+<td>Can I record part of a works order?</td>
+<td>Yes. The rest stays open.</td>
+</tr>
+<tr>
+<td>Can I change a component to a different item?</td>
+<td>Not on the phone yet — use the desk form.</td>
+</tr>
+<tr>
+<td>Does it work offline?</td>
+<td>No. Every screen sends the movement to Intacct as you record it.</td>
+</tr>
+</tbody>
+</table></div>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

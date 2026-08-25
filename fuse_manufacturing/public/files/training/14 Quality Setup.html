@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quality Setup — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 14</p>
+	<h1>Quality Setup</h1>
+	<p class="standfirst">Specifications, instruments, procedures and reviews — Fuse Manufacturing user guide 14</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What this covers</h3>
+<p>Guide 13 is the daily job: check a batch, record what you found. This one is everything
+behind it — what a batch is measured against, what the readings are taken on, how the work
+is meant to be done, and what happens when it is not.</p>
+<p>It is set up once by the people who own the product and the process, then referred to.
+Nobody touches it during a shift.</p>
+<h3>Where it lives</h3>
+<p>On Fuse Home, the <strong>Quality</strong> tile on the reference row opens the Quality page. Four cards:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Card</th>
+<th>What is in it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inspection</td>
+<td>Inspections, templates, parameters, parameter groups, measuring instruments</td>
+</tr>
+<tr>
+<td>Procedures and goals</td>
+<td>How the work is done, and what it is aiming at</td>
+</tr>
+<tr>
+<td>Review and action</td>
+<td>Reviews, meetings, corrective actions, customer feedback</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Inspection summary, and a review of open actions</td>
+</tr>
+</tbody>
+</table></div>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Quality workspace showing the four cards and the three shortcuts</span></figure>
+<h2>Specifications</h2>
+<h3>Parameters</h3>
+<p>A parameter is one thing that can be checked: <em>Visual condition</em>, <em>Channel count</em>,
+<em>Operating temperature</em>. Write it once and use it on as many products as you like.</p>
+<ol>
+<li>Quality page → <strong>Quality Inspection Parameter</strong> → <strong>Add</strong>.</li>
+<li>Give it a name and a description. The description is what the person on the line reads,
+   so say what "good" looks like rather than restating the name.</li>
+</ol>
+<p>Group related parameters with a <strong>Parameter Group</strong> if you have enough of them to be worth
+sorting.</p>
+<h3>Templates</h3>
+<p>A template is the specification for a product: which parameters apply, and what each one
+has to be.</p>
+<ol>
+<li>Quality page → <strong>Quality Inspection Template</strong> → <strong>Add</strong>.</li>
+<li>Name it after what it checks — <em>Incoming Camera Inspection</em>, <em>Assembled System Release</em>
+   — not after the product code. One template usually covers several products.</li>
+<li>Add a row per parameter and set the acceptance criteria:
+   - <strong>In words</strong> — type what it must be. The reading has to match it to pass, so write
+     the wording the inspector will use.
+   - <strong>Numeric</strong> — tick Numeric and set a minimum and a maximum. The reading is compared
+     against them automatically.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Quality Inspection Template with the parameter rows</span></figure>
+<h3>Putting a template on an item</h3>
+<ol>
+<li>Open the Item.</li>
+<li>Set <strong>Quality Inspection Template</strong>.</li>
+<li>Tick <strong>Inspect before purchase</strong>, <strong>Inspect before delivery</strong>, or both.</li>
+</ol>
+<p>Those two ticks are what actually make Fuse ask. A template on an item with neither ticked
+is a specification nobody is ever shown.</p>
+<h2>Measuring instruments</h2>
+<p>Every instrument a reading is taken on belongs in the register, because a reading is only
+evidence if the instrument was in calibration when it was taken.</p>
+<ol>
+<li>Quality page → <strong>Measuring Instruments</strong> → <strong>Add</strong>.</li>
+<li>Fill in:</li>
+</ol>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instrument ID</td>
+<td>What is written on the instrument itself</td>
+</tr>
+<tr>
+<td>Type</td>
+<td>pH meter, balance, thermometer, and so on</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active, Out of Service, or Retired</td>
+</tr>
+<tr>
+<td>Where it lives</td>
+<td>So somebody can go and find it</td>
+</tr>
+<tr>
+<td>Responsible</td>
+<td>Who owns keeping it in calibration</td>
+</tr>
+<tr>
+<td>Calibrated on / Calibration due</td>
+<td>The interval, in dates</td>
+</tr>
+<tr>
+<td>Certificate number and attachment</td>
+<td>The evidence</td>
+</tr>
+</tbody>
+</table></div>
+<p>Fuse refuses an inspection recorded against an instrument whose calibration has passed its
+due date, or that is marked Out of Service. That refusal is the control — it is why the
+register is worth keeping properly rather than as a spreadsheet nobody opens.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">Fuse Measuring Instrument list, one Out of Service</span></figure>
+<h2>Procedures and goals</h2>
+<h3>Procedures</h3>
+<p>A procedure is how a piece of work is meant to be done, written down: <em>Goods Receiving and
+Inspection</em>, <em>Production Release</em>, <em>Instrument Calibration</em>.</p>
+<ol>
+<li>Quality page → <strong>Quality Procedure</strong> → <strong>Add</strong>.</li>
+<li>Name it, then add one row per step. Keep the steps at the level someone could actually
+   follow — four or five, not twenty.</li>
+</ol>
+<p>Procedures can be nested, so a broad one can point at the detailed ones underneath it.</p>
+<h3>Goals</h3>
+<p>A goal is what the process is aiming at, with a number against it.</p>
+<ol>
+<li>Quality page → <strong>Quality Goal</strong> → <strong>Add</strong>.</li>
+<li>Name the goal, choose how often it is measured, and link the procedure it belongs to.</li>
+<li>Add one row per objective, each with a target and a unit — <em>Lines accepted first time,
+   98, Percent</em>.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">Quality Goal with two objectives and targets</span></figure>
+<h2>Review and action</h2>
+<h3>Reviews</h3>
+<p>At whatever interval the goal is set to, somebody records how it actually went.</p>
+<ol>
+<li>Quality page → <strong>Quality Review</strong> → <strong>Add</strong>.</li>
+<li>Choose the goal. Its objectives are pulled in with their targets.</li>
+<li>Against each one, write what actually happened and why.</li>
+</ol>
+<p>A review that only records the number is half a review. The sentence explaining the gap is
+what the next person needs.</p>
+<h3>Actions</h3>
+<p>A corrective action is what is being done about something that went wrong. A preventive
+one is what is being done about something that nearly did.</p>
+<ol>
+<li>Quality page → <strong>Quality Action</strong> → <strong>Add</strong>.</li>
+<li>Choose Corrective or Preventive, and link the review or the feedback it came from.</li>
+<li>Add a resolution row: what the problem is, and what is being done about it.</li>
+<li>Close it when it has been verified — not when it has been agreed.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 5</span><span class="what">Quality Action showing the problem and resolution</span></figure>
+<h3>Customer feedback</h3>
+<ol>
+<li>Set up a <strong>Feedback Template</strong> with the questions you ask.</li>
+<li>Record a <strong>Quality Feedback</strong> against the customer, with a rating and a comment per
+   question.</li>
+</ol>
+<p>Where the feedback shows something is ours to fix, raise an action from it. That is the
+loop closing: the customer said something, it was traced, and something changed.</p>
+<h2>How this hangs together</h2>
+<p>The chain worth being able to show an auditor runs in one direction:</p>
+<p><strong>Specification</strong> → <strong>Inspection</strong> (on a calibrated instrument) → <strong>Rejection</strong> →
+<strong>Review</strong> → <strong>Corrective action</strong> → <strong>Verified and closed</strong></p>
+<p>Every step is a document, each one links to the last, and none of it depends on anybody
+remembering. That is what makes the quality system evidence rather than intention.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

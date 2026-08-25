@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bin Transfer — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 11</p>
+	<h1>Bin Transfer</h1>
+	<p class="standfirst">Moving stock between bins inside one warehouse — Fuse Manufacturing user guide 11</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What a bin transfer is</h3>
+<p>Stock stays in the same warehouse but moves to a different bin. A pallet comes down from
+a high rack into a pick face; a part moves from goods-in to its home location; a bin is
+emptied so it can be re-racked.</p>
+<h3>Why it works differently from a warehouse transfer</h3>
+<p>This one is worth understanding, because it explains what the screen can and cannot tell
+you.</p>
+<p>Fuse holds stock <strong>per warehouse</strong>. Intacct holds it <strong>per bin</strong>. So when stock moves
+between two bins in the same warehouse, the Fuse quantity does not change at all —
+nothing has left the warehouse. There is no stock movement for Fuse to record.</p>
+<p>That means:</p>
+<ul>
+<li><strong>The Bin Transfer document is the record.</strong> There is no stock entry behind it.</li>
+<li><strong>It must reach Intacct.</strong> If posting to Intacct is switched off, the transfer is
+  refused rather than saved, because nothing else would record it.</li>
+<li><strong>Nothing can tell you what is in a bin.</strong> Fuse does not track stock at bin level, and
+  Intacct reports on-hand per warehouse rather than per bin. The quantities on screen are
+  warehouse-wide. Check the shelf.</li>
+</ul>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, reference row, Bin Transfer tile</span></figure>
+<h3>Before you record anything</h3>
+<ul>
+<li>Know the warehouse, the bin it is coming out of and the bin it is going into.</li>
+<li>Know what is actually moving and how much.</li>
+<li>For lot-tracked items, know which lot.</li>
+</ul>
+<p>If the Bin Transfer tile is not on your home page, either your items are not bin-enabled
+in Intacct or an administrator has the module switched off. Bin Transfer is off by default
+for exactly that reason: a site without bins has nowhere for this to move stock to.</p>
+<h2>Recording the move</h2>
+<h3>Step 1 — Choose the warehouse</h3>
+<ol>
+<li>On Fuse Home, click <strong>Bin Transfer</strong>.</li>
+<li>In <strong>Warehouse</strong>, choose where the stock is. Both bins live in this warehouse — stock
+   does not leave it.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Fuse Bin Transfer, warehouse field above the bin-to-bin section</span></figure>
+<h3>Step 2 — Choose the bins</h3>
+<ol>
+<li>In <strong>From bin</strong>, choose the bin the stock is coming out of.</li>
+<li>In <strong>To bin</strong>, choose where it is going.</li>
+</ol>
+<p>Both pickers only offer bins that belong to the warehouse above, and only bins that are
+active in Intacct. Change the warehouse afterwards and both bins are cleared, because they
+belonged to the old one.</p>
+<p>The same bin on both sides is refused. Nothing would move.</p>
+<h3>Step 3 — Add what is moving</h3>
+<ol>
+<li>In <strong>Items to move</strong>, click <strong>Add Row</strong> and choose the item. Only items the warehouse
+   actually holds are offered.</li>
+<li>Type the <strong>Quantity</strong>.</li>
+<li>A <strong>Lot</strong> column appears if anything on the document is lot tracked. Fill it in — a
+   lot-tracked move is refused without it.</li>
+</ol>
+<p>The message that appears as you pick each item shows what the whole warehouse holds,
+across every bin. It is there to give you a sense of scale, not to tell you what is in the
+bin you are emptying.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">Fuse Bin Transfer items grid with two rows</span></figure>
+<h3>Step 4 — Scanning</h3>
+<p>Click <strong>Scan Barcode</strong>, scan each item, and click <strong>Done Scanning</strong> when you are finished.
+Scanning the same item twice increases its quantity rather than adding a second row.</p>
+<h3>Step 5 — Submit</h3>
+<p>Click <strong>Submit</strong>. Fuse posts the move to Intacct as a pair of documents — the stock out of
+one bin and into the other — in a single operation. Either both go or neither does.</p>
+<p>If Intacct refuses it, the transfer does not stand here either and the reason is shown.
+The most common refusal is a quantity larger than the bin actually holds, which is the
+check this screen cannot make for you.</p>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">submitted Fuse Bin Transfer, Recorded in Intacct section</span></figure>
+<h2>After it is submitted</h2>
+<p><strong>Recorded in Intacct</strong> carries the keys of the two documents the move created. Anyone
+reconciling can find either one from here.</p>
+<h2>Common questions</h2>
+<h3>Why can I not see what is in each bin?</h3>
+<p>Because neither system holds it in a way this screen can read. Intacct is where stock sits
+in bins, and it reports on-hand by warehouse. Until Fuse mirrors bins as warehouses in
+their own right, the honest answer is that the shelf is the source of truth for what is in
+a bin.</p>
+<h3>It will not let me submit — posting is switched off</h3>
+<p>That is deliberate. A bin transfer has no effect in Fuse at all; Intacct is the only place
+the movement lands. Saving one while posting is off would file a record of something that
+never happened. Ask an administrator to turn <strong>Post Stock Movements</strong> back on.</p>
+<h3>I need to undo one</h3>
+<p>Cancel it. The stock is moved back to the bin it came from, as a new pair of documents in
+Intacct. The original stays on the record.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

@@ -63,6 +63,15 @@ MODULES = [
 		"description": "Move stock between warehouses.",
 	},
 	{
+		# Off by default. Only a client whose items are bin-enabled in Intacct has anywhere
+		# for this to move stock to, and on a site without bins the screen would offer an
+		# empty picker and refuse everything put through it.
+		"key": "bin_transfer",
+		"label": "Bin Transfer",
+		"description": "Move stock between bins inside one warehouse. The warehouse total does not change, so this is recorded in Fuse and posted to Intacct, which is where stock is held per bin.",
+		"default": 0,
+	},
+	{
 		"key": "quality",
 		"label": "Quality",
 		"description": "Inspect goods in, batches made and product going out, against the item's own specification. Off means the checks are not enforced anywhere.",
@@ -116,6 +125,11 @@ MODULE_DOCTYPES = {
 	"receiving": ["Purchase Receipt"],
 	"picking": ["Delivery Note"],
 	"works_orders": ["Work Order"],
+	# Fuse's own transfer screens. These CAN be withdrawn by permission because each is a
+	# doctype of its own — the Stock Entry the warehouse one raises cannot be, which is
+	# why item_transfer appears in MODULE_PURPOSES below as well.
+	"item_transfer": ["Fuse Stock Transfer"],
+	"bin_transfer": ["Fuse Bin Transfer"],
 	# Quality does not gate a movement document — it gates whether a movement is allowed
 	# to happen without a passing inspection. What the switch withdraws is the ability to
 	# record one at all.

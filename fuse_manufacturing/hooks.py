@@ -53,6 +53,13 @@ doc_events = {
 		"on_submit": "fuse_manufacturing.postings.on_stock_entry_submit",
 		"on_cancel": "fuse_manufacturing.postings.on_stock_entry_cancel",
 	},
+	# A bin move has no Stock Entry behind it — ERPNext holds stock per warehouse, so the
+	# warehouse total does not change and there is nothing local to record. This document
+	# is the record, which is why it posts and reverses on its own hooks.
+	"Fuse Bin Transfer": {
+		"on_submit": "fuse_manufacturing.postings.on_bin_transfer_submit",
+		"on_cancel": "fuse_manufacturing.postings.on_bin_transfer_cancel",
+	},
 	# Goods ARE received here, as of 2026-08-18. The receipt posts to Intacct as a PO
 	# Receiver converted from the mirrored order, so the delivery is recorded once and
 	# both systems see the same stock. The earlier blanket refusal was removed together

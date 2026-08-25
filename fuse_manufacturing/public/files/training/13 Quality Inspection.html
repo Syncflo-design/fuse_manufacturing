@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quality Inspection — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 13</p>
+	<h1>Quality Inspection</h1>
+	<p class="standfirst">Checking a batch against its specification — Fuse Manufacturing user guide 13</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What an inspection is</h3>
+<p>An item has a specification: what it should look like, what it should measure, what it
+should do. An inspection is the record that somebody checked, what they found, and what
+they decided.</p>
+<p>Fuse asks for one at three points, and each is set per item:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Point</th>
+<th>When it is asked for</th>
+<th>Set by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Incoming</td>
+<td>A supplier delivery is booked in</td>
+<td><strong>Inspect before purchase</strong> on the item</td>
+</tr>
+<tr>
+<td>In process</td>
+<td>A batch is produced against a works order</td>
+<td><strong>Inspect before delivery</strong> on the item</td>
+</tr>
+<tr>
+<td>Outgoing</td>
+<td>Goods are picked for a customer</td>
+<td><strong>Inspect before delivery</strong> on the item</td>
+</tr>
+</tbody>
+</table></div>
+<p>An item with neither flag set is never asked for one.</p>
+<h3>What happens if the check fails</h3>
+<p>A rejected inspection stops the movement. The goods cannot be received, produced onward,
+or despatched on that document, and the line is named so nobody has to guess which one.</p>
+<p>That is the point of the whole system. Releasing product that failed its own
+specification is a <strong>concession</strong> — a decision somebody makes deliberately and records,
+not something to click past on a phone.</p>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, Quick Launch row, Quality Inspection tile</span></figure>
+<h2>Recording an inspection</h2>
+<p>You can start one from two places, and both produce the same record.</p>
+<h3>From the movement</h3>
+<p>This is the usual way, because the inspection belongs to a delivery, a production run or a
+despatch.</p>
+<ol>
+<li>Open the receipt, the works order or the pick.</li>
+<li>On the line that needs checking, choose <strong>Inspect</strong>.</li>
+<li>The specification for that item opens with one row per parameter.</li>
+</ol>
+<p>The document, the item, the batch and the quantity are all filled in from where you came
+from, so there is nothing to retype and nothing to get wrong.</p>
+<h3>From the Quality Inspection tile</h3>
+<p>Use this to look back at what has been inspected, or to record one that was taken away
+from a document.</p>
+<ol>
+<li>On Fuse Home, click <strong>Quality Inspection</strong>.</li>
+<li>Click <strong>Add Quality Inspection</strong>.</li>
+<li>Choose the inspection type, the document it relates to, and the item.</li>
+</ol>
+<h2>Filling it in</h2>
+<h3>Step 1 — The readings</h3>
+<p>Each row is one thing to check, and comes from the item's inspection template:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What goes in it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parameter</td>
+<td>What is being checked. Filled in from the template.</td>
+</tr>
+<tr>
+<td>Acceptance criteria</td>
+<td>What it has to be. Either a value in words or a minimum and maximum.</td>
+</tr>
+<tr>
+<td>Reading</td>
+<td>What you actually found</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Accepted or Rejected for that one line</td>
+</tr>
+</tbody>
+</table></div>
+<p>For a numeric parameter, type the measurement. It is compared against the minimum and
+maximum and the line marks itself.</p>
+<p>For a parameter checked in words, the reading has to match the acceptance criteria to
+pass. If it does not — "two cartons crushed" against "sealed and undamaged" — the line
+fails, which is exactly what you want it to do.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Quality Inspection readings table, one row rejected</span></figure>
+<h3>Step 2 — The instrument</h3>
+<p>Where a reading came off a meter, a gauge or a balance, name it in <strong>Instrument</strong>.</p>
+<p>A reading is only evidence if the instrument was in calibration when it was taken. Fuse
+refuses an inspection recorded against an instrument whose calibration has lapsed or that
+is out of service — see guide 14 Quality Setup for the register.</p>
+<h3>Step 3 — Sample size and remarks</h3>
+<ul>
+<li><strong>Sample size</strong> — how many units you actually checked out of the quantity delivered or
+  made.</li>
+<li><strong>Remarks</strong> — what a person would need to know later. On a rejection this is the most
+  useful field on the document, so write what was wrong, not that something was.</li>
+</ul>
+<h3>Step 4 — The overall result</h3>
+<p>The inspection as a whole is <strong>Rejected</strong> if any single line was rejected. That is not
+something to override on this screen; if the failing reading was a mistake, correct the
+reading.</p>
+<h3>Step 5 — Submit</h3>
+<p>Submit the inspection. It attaches to the line it came from, and the movement can now go
+ahead — or is now formally blocked, if it failed.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">submitted Quality Inspection showing Accepted status and the instrument</span></figure>
+<h2>When something fails</h2>
+<ol>
+<li>The movement stops. Quarantine the goods.</li>
+<li>Raise a <strong>Quality Action</strong> against the rejection, from the Quality page. That is where
+   the cause is investigated, a resolution agreed, and somebody made responsible for it.</li>
+<li>If the product is to be released anyway, that decision and its reason belong on the
+   record. It is a concession, and it is auditable.</li>
+</ol>
+<p>See guide 14 Quality Setup for procedures, goals and corrective actions.</p>
+<h2>Common questions</h2>
+<h3>The inspection did not appear when I expected it</h3>
+<p>The item is not flagged for it. Check <strong>Inspect before purchase</strong> and <strong>Inspect before
+delivery</strong> on the item, and that it has an inspection template.</p>
+<h3>I cannot select my instrument</h3>
+<p>Its calibration has lapsed, or it is marked Out of Service. Use another instrument, or ask
+whoever owns the register to recalibrate it. Do not record the reading without one.</p>
+<h3>Can I inspect part of a delivery?</h3>
+<p>Yes — that is what sample size is for. You record how many you checked; the inspection
+covers the line.</p>
+<h3>Where do I find old inspections?</h3>
+<p>The Quality Inspection tile lists them all. The Quality page has a <strong>Rejected</strong> shortcut,
+which is what people usually go looking for, and a Quality Inspection Summary report.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

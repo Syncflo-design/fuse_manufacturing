@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creating a Works Order — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 04</p>
+	<h1>Creating a Works Order</h1>
+	<p class="standfirst">Raising an instruction to make something — Fuse Manufacturing user guide 04</p>
+</header>
+<main>
+<blockquote>
+<p>This guide covers <strong>raising</strong> a works order. Recording what you actually made against
+one is a separate job, covered in <strong>Works Orders — recording production</strong>.</p>
+</blockquote>
+<h2>Before you start</h2>
+<h3>What a works order is</h3>
+<p>An instruction to make something: which item, how much of it, and from what recipe. It
+is raised before production starts and stays open until the full quantity has been made.</p>
+<p>Raising one does not move any stock. Nothing happens in Fuse or in Sage Intacct until
+somebody records production against it.</p>
+<h3>Who raises them</h3>
+<p>Whoever plans production — a supervisor or planner. The person who <em>fulfils</em> the order is
+usually not the person who raised it, which is why these are two different guides.</p>
+<h3>Where the recipe comes from</h3>
+<p>Every works order points at a <strong>BOM</strong> — the recipe. On this site, BOMs are Sage Intacct
+kits, brought across by the kit sync. You cannot create or edit a BOM in Fuse; the New
+button is not there and an attempt is refused.</p>
+<p>If a recipe is wrong or missing, it is fixed in Intacct as a kit, and the next sync
+brings it across.</p>
+<h3>Before you raise one</h3>
+<ul>
+<li>Know <strong>what</strong> you are making and <strong>how much</strong>.</li>
+<li>Know <strong>when</strong> it is needed.</li>
+<li>Check the recipe exists — if the item has no BOM, the works order cannot be raised.</li>
+</ul>
+<h2>Raising the works order</h2>
+<ol>
+<li>On Fuse Home, click <strong>Works Orders</strong>.</li>
+<li>Click <strong>+ Add Work Order</strong> at the top right.</li>
+<li>Fill in:</li>
+</ol>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What to put</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Item To Manufacture</td>
+<td>The finished item. The BOM fills in by itself if the item has a default one.</td>
+</tr>
+<tr>
+<td>BOM No</td>
+<td>The recipe. Leave it alone unless the item has more than one and you mean to use another.</td>
+</tr>
+<tr>
+<td>Qty To Manufacture</td>
+<td>How much you are instructing them to make.</td>
+</tr>
+<tr>
+<td>Company</td>
+<td>Already set. Leave it.</td>
+</tr>
+<tr>
+<td>Target Warehouse</td>
+<td>Where the finished goods will be put.</td>
+</tr>
+<tr>
+<td>Source Warehouse</td>
+<td>Where the components will be taken from.</td>
+</tr>
+<tr>
+<td>Planned Start Date</td>
+<td>When production is expected to begin.</td>
+</tr>
+<tr>
+<td>Expected Delivery Date</td>
+<td>When it is needed by.</td>
+</tr>
+</tbody>
+</table></div>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">the Work Order form with item, BOM and quantity filled in</span></figure>
+<ol start="4">
+<li>Click <strong>Save</strong>. The order is a draft — it changes nothing and can be edited or
+   deleted freely.</li>
+<li>Read the <strong>Required Items</strong> table. Fuse has worked the components out from the recipe
+   for the quantity you entered.</li>
+<li>Click <strong>Submit</strong>.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">the Required Items table on a saved works order</span></figure>
+<h2>What happens after you submit</h2>
+<p>The order moves to <strong>Not Started</strong> and appears on the shop floor's list of open orders.
+Still nothing has moved — it is an instruction, not a movement.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Status</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Draft</td>
+<td>Saved but not submitted. Nobody can produce against it.</td>
+</tr>
+<tr>
+<td>Not Started</td>
+<td>Submitted and waiting. Ready to be produced against.</td>
+</tr>
+<tr>
+<td>In Process</td>
+<td>Some production has been recorded, but not the full quantity.</td>
+</tr>
+<tr>
+<td>Completed</td>
+<td>The full quantity has been made. It drops off the default list.</td>
+</tr>
+<tr>
+<td>Stopped</td>
+<td>Deliberately halted. Nothing more can be recorded against it.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Two things that are fixed once you submit</h2>
+<p><strong>The required items list.</strong> On this site the components on a submitted works order
+cannot be edited. That is deliberate, and it is not a limitation: substitutions belong to
+the <em>run</em>, not the instruction. When the floor is short of something they change it on
+the Manufacture entry when recording production, which affects that run only and leaves
+the recipe and the works order alone.</p>
+<p><strong>The recipe.</strong> Changing the BOM afterwards does not change a works order already raised.
+It carries the components it was raised with.</p>
+<p>If the quantity or the item is genuinely wrong, <strong>stop the order and raise a new one</strong>
+rather than trying to bend it.</p>
+<h2>What the floor can change, and what it cannot</h2>
+<p>You are raising an instruction. The people making it record what actually happened, and
+those are not always the same thing — so it is worth knowing exactly how far they can
+depart from what you wrote.</p>
+<p><strong>On the works order itself: nothing.</strong> Once you submit, the required items are fixed.
+Nobody on the floor can edit the order you raised.</p>
+<p><strong>On the production run: quite a lot, and deliberately so.</strong> When they record production,
+Fuse opens a Manufacture entry pre-filled from the recipe, and on that entry they may:</p>
+<ul>
+<li>change a <strong>quantity</strong>, where more or less went in than the recipe says</li>
+<li><strong>substitute</strong> an item, by changing the item code on a row — they ran short and used
+  something else</li>
+<li><strong>add a row</strong>, for something that went in which the recipe does not have at all</li>
+<li><strong>remove a row</strong>, or set it to zero, for something that was not used</li>
+</ul>
+<p>All four apply to <strong>that run only</strong>. None of them touches the BOM, the Intacct kit, or
+this works order. The next order for the same item starts from the original recipe.</p>
+<p><strong>Why it works this way.</strong> The cost of the finished goods is worked out from what was
+actually consumed. If the floor could not record a substitution, they would have to record
+the recipe instead — and the cost would be wrong from that point on, with nothing to show
+it. A works order that cannot be departed from produces accurate paperwork and inaccurate
+costs.</p>
+<p><strong>What this means for you.</strong> If you find substitutions happening on the same item run
+after run, the recipe is wrong — fix the kit in Intacct rather than leaving the floor to
+correct it every time. The Manufacture entries are the record of what really happened, and
+they are worth reading for exactly this.</p>
+<h2>Producing in stages</h2>
+<p>One works order can be produced against many times. An order for 100 kg can be recorded
+as 40 today and 60 tomorrow; it stays In Process until the full quantity is made.</p>
+<p>You do not raise a separate works order per shift.</p>
+<h2>Stopping or closing an order</h2>
+<p>If an order is abandoned, open it and use <strong>Stop</strong>. It can no longer be produced against,
+and it comes off the shop floor's list.</p>
+<p>Do not delete a submitted works order. Stopping keeps the record of what was intended and
+what was made against it; deleting throws that away.</p>
+<h2>If something goes wrong</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>What you see</th>
+<th>What it means and what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No BOM found for the item</td>
+<td>The item has no recipe. It is created in Intacct as a kit, then the kit sync brings it across.</td>
+</tr>
+<tr>
+<td>BOM is not active / not submitted</td>
+<td>The recipe exists but is not usable. Check the kit in Intacct and re-run the sync.</td>
+</tr>
+<tr>
+<td>Item To Manufacture is not a stock item</td>
+<td>You have chosen something Intacct does not hold stock for. Check the item.</td>
+</tr>
+<tr>
+<td>The Required Items table is empty</td>
+<td>The BOM has no components. Fix the kit in Intacct.</td>
+</tr>
+<tr>
+<td>Recipes come from Intacct on this site</td>
+<td>You have tried to create or edit a BOM. Recipes are kits, changed in Intacct.</td>
+</tr>
+<tr>
+<td>Cannot edit the required items</td>
+<td>Correct on this site. Substitute on the Manufacture entry when recording production instead.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Quick reference</h2>
+<p>Fuse Home → Works Orders → Add Work Order → item, quantity, warehouses, dates → Save →
+check Required Items → Submit.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Does raising one move stock?</td>
+<td>No. Nothing moves until production is recorded.</td>
+</tr>
+<tr>
+<td>Can I change the recipe here?</td>
+<td>No. BOMs are Intacct kits.</td>
+</tr>
+<tr>
+<td>Can I change the components on the order?</td>
+<td>Not once submitted. Substitute per run instead.</td>
+</tr>
+<tr>
+<td>Can one order be produced in parts?</td>
+<td>Yes. It stays open until the full quantity is made.</td>
+</tr>
+<tr>
+<td>How do I cancel one?</td>
+<td>Stop it. Do not delete it.</td>
+</tr>
+<tr>
+<td>Who records what was made?</td>
+<td>The shop floor — see the recording production guide.</td>
+</tr>
+</tbody>
+</table></div>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

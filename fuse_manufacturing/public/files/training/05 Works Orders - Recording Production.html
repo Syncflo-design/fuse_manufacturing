@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Works Orders - Recording Production — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 05</p>
+	<h1>Works Orders - Recording Production</h1>
+	<p class="standfirst">Recording what you have manufactured — Fuse Manufacturing user guide 05</p>
+</header>
+<main>
+<blockquote>
+<p>This guide covers <strong>recording production</strong> against a works order. Raising one in the
+first place is a separate job, covered in <strong>Creating a Works Order</strong>.</p>
+</blockquote>
+<h2>Before you start</h2>
+<h3>What you are doing</h3>
+<p>Recording production does two things at once. The components are consumed, and the
+finished goods are created. Both happen together, and both reach Sage Intacct as a single
+operation — so you can never end up with components used and nothing to show for them.</p>
+<h3>Where the recipe comes from</h3>
+<p>Every works order points at a BOM — the recipe. BOMs come from Sage Intacct as kits. You
+never type a recipe in Fuse and you cannot change one here.</p>
+<p>Fuse works out the component quantities from the recipe and the amount you are making.
+<strong>Your job is to confirm what was actually used and correct anything that differed.</strong></p>
+<h3>Before you record anything</h3>
+<ul>
+<li>Know how much you actually made, not how much you intended to make.</li>
+<li>Know whether anything was substituted, added, or used in a different quantity.</li>
+<li>Know which warehouse the components came from — the store, or a work-in-progress
+  warehouse if they were issued to the floor first.</li>
+</ul>
+<h2>Finding the works order</h2>
+<ol>
+<li>On Fuse Home, click <strong>Works Orders</strong>.</li>
+<li>A list opens showing the open orders: the item being made, the status, the BOM, the
+   quantity ordered and the order number.</li>
+<li>Click the row you are recording against.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">the Work Order list filtered to open orders</span></figure>
+<p>Status <strong>In Process</strong> means the order is open and can be produced against. A completed
+order drops off the default list.</p>
+<h2>Recording production</h2>
+<p>Do this when the batch is finished and you know how much you actually made.</p>
+<h3>Step 1 — Finish</h3>
+<ol>
+<li>With the works order open, click <strong>Finish</strong> at the top right.</li>
+<li>A <strong>Select Quantity</strong> box appears, showing the quantity for manufacture and the
+   maximum you may record.</li>
+<li>Type how much you actually made. It can be less than the full order.</li>
+<li>Click <strong>Create</strong>.</li>
+</ol>
+<p>Leave <em>Consider Process Loss</em> alone unless your supervisor has told you otherwise.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">the Select Quantity dialog</span></figure>
+<h3>Step 2 — The Manufacture entry</h3>
+<p>A <strong>Manufacture entry</strong> opens, already filled in. This document did not exist until you
+clicked Finish — it is created by it. The works order number is carried across, and every
+component from the recipe has been worked out for the quantity you entered.</p>
+<p>The last row in the list is the finished goods going in. The rows above it are the
+components coming out.</p>
+<p>It is a <strong>draft</strong>. Nothing has moved yet, in Fuse or in Intacct.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">the Stock Entry with its component rows</span></figure>
+<h2>Step 3 — Changing the recipe for this run</h2>
+<p>This is the part that matters, and the part a new operator most often rushes. What Fuse
+has filled in is what the recipe <strong>says</strong> should have been used. What you record should be
+what actually <strong>was</strong>.</p>
+<p>You can change three things, and all of them apply to <strong>this run only</strong>.</p>
+<h3>Change a quantity</h3>
+<p>A component went over or under. Change the <strong>Qty</strong> on that row to what was really used.</p>
+<h3>Substitute one item for another</h3>
+<p>You ran short of something and used a different material. <strong>Change the Item Code on that
+row</strong> to what was really used, and set the quantity.</p>
+<p>Fuse records the substitute, not the original. That is deliberate, and it is why
+adjustable recipes work.</p>
+<h3>Add a row</h3>
+<p>Something went in that the recipe does not have at all. Click <strong>Add Row</strong>, choose the
+item, enter the quantity, and set the source warehouse to wherever it came from.</p>
+<h3>Remove a row</h3>
+<p>A component was not used. Either set its quantity to <strong>zero</strong> or <strong>delete the row</strong>.
+Both have the same effect: it is not consumed and it is not sent to Intacct.</p>
+<blockquote>
+<p><strong>What this does NOT change</strong>
+The master BOM is untouched. The recipe in Intacct is untouched. The next works order
+for this item starts from the original recipe again, exactly as before.
+Nothing you do on this screen changes what anyone else will see tomorrow.</p>
+</blockquote>
+<h3>Why the honesty matters</h3>
+<p>The cost of the finished goods is worked out from the cost of what was <strong>actually
+consumed</strong>. Record what really went in and the finished cost is right. Accept the recipe
+when it was not followed, and the cost is wrong from that point onwards — and nobody
+downstream has any way of knowing.</p>
+<h2>Step 4 — Save, check, submit</h2>
+<ol>
+<li>Click <strong>Save</strong>. The entry is still a draft. Nothing has moved.</li>
+<li>Read the lines once more.</li>
+<li>Click <strong>Submit</strong>, and confirm.</li>
+</ol>
+<p>Two records go to Intacct together: the components consumed, and the finished goods
+produced. They are sent as one operation, so a half-recorded production run is not
+possible.</p>
+<h2>Producing in stages</h2>
+<p>You do not have to record a whole order at once.</p>
+<p>If the order is for 100 kg and you made 40 kg today, record 40. The works order will show
+40 made and 60 still to go. Tomorrow you record the rest, and each part reaches Intacct as
+it happens.</p>
+<p>This is the normal way to work when a batch runs over more than one shift or day. There is
+no need to wait until an order is complete.</p>
+<h2>Checking it worked</h2>
+<ol>
+<li>Go to Fuse Home and click <strong>Stock Control</strong>.</li>
+<li>Under Reports, open <strong>Stock Balance</strong>.</li>
+<li>Check the finished item has gone up by what you made, and a component or two have gone
+   down.</li>
+<li>Open the works order again — <strong>Manufactured Qty</strong> should now show what you recorded.</li>
+</ol>
+<h2>If something goes wrong</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>What you see</th>
+<th>What it means and what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Negative stock / not enough quantity</td>
+<td>A component is not available in the source warehouse in the quantity shown. Check the warehouse is right — if the components were issued to the floor, they are in a work-in-progress warehouse, not the store.</td>
+</tr>
+<tr>
+<td>Quantity must be positive</td>
+<td>A row has zero or a blank quantity. Enter it, or remove the row.</td>
+</tr>
+<tr>
+<td>This entry produces more than one finished item</td>
+<td>Only one finished item per entry. Record the other on its own entry.</td>
+</tr>
+<tr>
+<td>A component is produced but is not the finished item</td>
+<td>A row has a destination but no source. Scrap and by-products are not handled yet — speak to your supervisor.</td>
+</tr>
+<tr>
+<td>No Intacct definition is mapped</td>
+<td>Fuse does not know which Intacct document to create. An administrator sets this under Transactions in Intacct Settings.</td>
+</tr>
+<tr>
+<td>Intacct rejected the request</td>
+<td>Nothing has been recorded anywhere. Read the reason; if you cannot fix it, send it to your administrator.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Two rules that apply to everything in Fuse</h2>
+<h3>Saving is not submitting</h3>
+<p>Saving stores a draft. A draft changes no stock at all, in Fuse or in Sage Intacct, and
+you can edit it, leave it, or delete it freely. Nothing has happened yet.</p>
+<p>Submitting is the moment it becomes real. Fuse sends the movement to Intacct, and only
+once Intacct has accepted it does Fuse record it here. Read your work between the two.</p>
+<h3>Cancel, never delete</h3>
+<p>If you get something wrong after submitting, open the document and choose <strong>Cancel</strong>. Fuse
+reverses the movement in Intacct first, then cancels it here, so both systems return to
+where they were.</p>
+<p>Do not delete, and do not try to correct a mistake by entering a second, opposite
+movement. Deleting would remove the record here while Intacct still holds the movement,
+and an opposite entry leaves two wrong movements in the history instead of none.</p>
+<p>Cancelling a production run reverses both halves in Intacct: the finished goods come back
+out, and the components go back in at the cost they left at. The works order returns to
+the position it was in before.</p>
+<h2>Jobs that belong in Intacct</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>If you try to</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Create or change a BOM</td>
+<td>Refused. Recipes are Intacct kits and are changed there.</td>
+</tr>
+<tr>
+<td>Adjust stock up or down</td>
+<td>Refused. On-hand corrections are made through a Cycle Count in Intacct.</td>
+</tr>
+<tr>
+<td>Change an item, warehouse or supplier</td>
+<td>Read-only here. These come from Intacct, and a change made in Fuse would be overwritten at the next sync.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Quick reference</h2>
+<p>Fuse Home → Works Orders → open the order → Finish → quantity → Create → correct the
+components → Save → Submit.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Can I record part of an order?</td>
+<td>Yes. Record what you made; the rest stays open.</td>
+</tr>
+<tr>
+<td>Can I change a component's quantity?</td>
+<td>Yes.</td>
+</tr>
+<tr>
+<td>Can I swap a component for a different item?</td>
+<td>Yes. Change the Item Code on that row.</td>
+</tr>
+<tr>
+<td>Can I add a component that is not in the recipe?</td>
+<td>Yes. Add Row.</td>
+</tr>
+<tr>
+<td>Can I remove a component?</td>
+<td>Yes. Set it to zero or delete the row.</td>
+</tr>
+<tr>
+<td>Does any of that change the BOM?</td>
+<td>No. This run only.</td>
+</tr>
+<tr>
+<td>Do I work out the quantities?</td>
+<td>No. Fuse takes them from the recipe. You correct them.</td>
+</tr>
+<tr>
+<td>Do I enter a cost?</td>
+<td>No. It is worked out from the components consumed.</td>
+</tr>
+<tr>
+<td>Two finished items on one entry?</td>
+<td>No. One each.</td>
+</tr>
+<tr>
+<td>How do I undo it?</td>
+<td>Cancel the Manufacture entry. Both halves are reversed.</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Where this goes.</strong> Fuse and Sage Intacct hold the same stock. Anything you submit here
+is sent to Intacct immediately, and Fuse only records it once Intacct has accepted it. If
+Intacct refuses, nothing is saved in either system and you will see the reason on screen.</p>
+</blockquote>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

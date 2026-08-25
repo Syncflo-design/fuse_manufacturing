@@ -771,6 +771,220 @@ def _default_bin(warehouse, item_code):
 	return frappe.db.get_value("Warehouse", warehouse, "custom_intacct_default_bin")
 
 
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Bin transfer — a move between two bins in one warehouse
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# The odd one out among the postings, and deliberately so. Every other movement here has
+# an ERPNext document behind it that changed something locally. This one does not: ERPNext
+# holds stock per warehouse, and a bin move leaves the warehouse total exactly as it was.
+#
+# So the Fuse Bin Transfer IS the local record, and Intacct is where the movement lands.
+# Which also means the usual safety net does not apply — there is no ERPNext quantity to
+# disagree with Intacct, and nothing to check the posting against afterwards.
+
+
+@frappe.whitelist()
+def post_bin_transfer(bin_transfer, dry_run=False):
+	"""Post a Fuse Bin Transfer to Intacct as an out-and-in pair on one warehouse.
+
+	The same two definitions a tracked warehouse transfer uses. Only the bin differs
+	between the legs, which is the whole movement as far as Intacct is concerned.
+	"""
+	doc = frappe.get_doc("Fuse Bin Transfer", bin_transfer)
+
+	if not dry_run and doc.docstatus != 1:
+		frappe.throw(f"{bin_transfer} is not submitted (docstatus {doc.docstatus}).")
+
+	entity = gateway.entity_for_company(doc.company)
+	legs = rules.bin_transfer_legs(
+		warehouse=_intacct_warehouse(doc.warehouse),
+		source_bin=_bin_id(doc.source_bin),
+		target_bin=_bin_id(doc.target_bin),
+		lines=_bin_transfer_lines(doc),
+	)
+
+	return _post_bin_legs(doc, legs, entity, dry_run=dry_run, purpose="bin-transfer")
+
+
+@frappe.whitelist()
+def reverse_bin_transfer(bin_transfer, dry_run=False):
+	"""Undo a posted bin transfer by moving the stock back to the bin it came from."""
+	doc = frappe.get_doc("Fuse Bin Transfer", bin_transfer)
+
+	entity = gateway.entity_for_company(doc.company)
+	legs = rules.bin_transfer_legs(
+		# Swapped. Every check the forward post applies still applies — same bin both ends,
+		# missing unit, non-positive quantity.
+		warehouse=_intacct_warehouse(doc.warehouse),
+		source_bin=_bin_id(doc.target_bin),
+		target_bin=_bin_id(doc.source_bin),
+		lines=_bin_transfer_lines(doc),
+	)
+
+	# A different purpose from the forward post, so the control ID differs and Intacct does
+	# not mistake the reversal for a replay of the original.
+	return _post_bin_legs(doc, legs, entity, dry_run=dry_run, purpose="bin-transfer-reverse")
+
+
+def _bin_transfer_lines(doc):
+	"""The rows of a bin transfer, priced at what the stock is worth in that warehouse.
+
+	The cost is per item per WAREHOUSE, because that is the finest grain either system
+	holds one at. Moving between bins does not change what the stock is worth, so sending
+	the warehouse's own valuation back in on the arriving leg leaves the value where it was.
+	"""
+	lines = []
+
+	for row in doc.items:
+		if flt(row.quantity) <= 0:
+			continue
+
+		item = frappe.db.get_value(
+			"Item", row.item, ["stock_uom", "custom_intacct_lot_tracked"], as_dict=True
+		)
+
+		lot = (row.lot or "").strip() or None
+		if item.custom_intacct_lot_tracked and not lot:
+			frappe.throw(
+				f"Row {row.idx} ({row.item}) is lot tracked in Intacct, so the move has to "
+				"say which lot was shifted."
+			)
+
+		lines.append(
+			{
+				"item_code": row.item,
+				"qty": flt(row.quantity),
+				"uom": item.stock_uom,
+				"lot": lot,
+				"unit_cost": _warehouse_valuation(row.item, doc.warehouse),
+			}
+		)
+
+	if not lines:
+		frappe.throw(f"{doc.name} has nothing to move.")
+
+	return lines
+
+
+def _warehouse_valuation(item_code, warehouse):
+	"""What one unit of this item is worth in this warehouse, as ERPNext holds it.
+
+	ERPNext holds it because Intacct gave it to us — the same reasoning that lets a
+	production run send the cost of what it consumed.
+	"""
+	return flt(
+		frappe.db.get_value(
+			"Bin", {"item_code": item_code, "warehouse": warehouse}, "valuation_rate"
+		)
+	)
+
+
+def _post_bin_legs(doc, legs, entity, *, dry_run, purpose):
+	"""Send the pair, atomically.
+
+	Atomic for the reason every pair here is: half of a bin transfer is stock that left a
+	bin and arrived nowhere, and no ERPNext quantity would ever reveal it.
+	"""
+	posting_date = frappe.utils.getdate(doc.date_issued)
+
+	out_fn = build_ictransaction_xml(
+		definition=mapped_definition(TRANSFER_OUT),
+		posting_date=posting_date,
+		reference_no=doc.name,
+		lines=legs["out"],
+		location_id=entity,
+	)
+	in_fn = build_ictransaction_xml(
+		definition=mapped_definition(TRANSFER_IN),
+		posting_date=posting_date,
+		reference_no=doc.name,
+		lines=legs["in"],
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"entity": entity,
+			"out_xml": ET.tostring(out_fn, encoding="unicode"),
+			"in_xml": ET.tostring(in_fn, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[out_fn, in_fn],
+		company=doc.company,
+		reference=("Fuse Bin Transfer", doc.name),
+		purpose=purpose,
+		atomic=True,
+	)
+	return {"posted": True, "intacct_keys": keys}
+
+
+def _bin_id(bin_name):
+	"""The BINID out of a mirrored bin record. What Intacct wants is the bare ID.
+
+	The link value carries the warehouse as well, because a bin ID is only unique within
+	one — send that composite and Intacct reports a bin it has never heard of.
+	"""
+	if not bin_name:
+		return None
+	return frappe.db.get_value("Intacct Bin", bin_name, "bin_id")
+
+
+def on_bin_transfer_submit(doc, method=None):
+	"""Post the move to Intacct as part of submitting it.
+
+	INTACCT POSTS FIRST, as everywhere else. Here it matters more than anywhere else: this
+	document has no stock consequence of its own, so a skipped posting would leave a
+	submitted record of something that never happened.
+	"""
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.post_movements:
+		# Refused rather than skipped. Everywhere else a switched-off posting still leaves
+		# a real ERPNext movement behind; here there is nothing else, so submitting would
+		# file a movement that exists only on this screen.
+		frappe.throw(
+			"Posting to Intacct is switched off, so a bin transfer cannot be recorded.\n\n"
+			"Nothing else records it — the stock only moves between bins in Intacct.",
+			title="Posting is switched off",
+		)
+
+	result = post_bin_transfer(doc.name)
+
+	doc.db_set("intacct_key", ", ".join(str(key) for key in result.get("intacct_keys") or [] if key))
+	doc.db_set("intacct_posted_on", frappe.utils.now_datetime())
+
+
+def on_bin_transfer_cancel(doc, method=None):
+	"""Move the stock back before letting the cancel stand."""
+	if not doc.get("intacct_key"):
+		# Never posted — nothing in Intacct to undo. Cancel freely.
+		return
+
+	if doc.get("intacct_reversal_key"):
+		frappe.throw(
+			f"{doc.name} has already been reversed in Intacct "
+			f"(key {doc.intacct_reversal_key}). Reversing it twice would move the stock "
+			"back a second time."
+		)
+
+	settings = frappe.get_cached_doc("Intacct Settings")
+	if not settings.post_movements:
+		frappe.throw(
+			f"{doc.name} was posted to Intacct (key {doc.intacct_key}) but posting is now "
+			"switched off, so it cannot be reversed. Turn Post Stock Movements back on to "
+			"cancel this, or reverse it in Intacct by hand.",
+			title="Posting is switched off",
+		)
+
+	result = reverse_bin_transfer(doc.name)
+
+	doc.db_set("intacct_reversal_key", ", ".join(str(key) for key in result.get("intacct_keys") or [] if key))
+	doc.db_set("intacct_reversed_on", frappe.utils.now_datetime())
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Goods receipt — a PO Receiver, converted from the purchase order
 # ──────────────────────────────────────────────────────────────────────────────

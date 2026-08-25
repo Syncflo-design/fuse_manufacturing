@@ -272,6 +272,75 @@ def detailed_transfer_legs(lines):
 
 	return {"out": out_legs, "in": in_legs}
 
+
+def bin_transfer_legs(warehouse, source_bin, target_bin, lines):
+	"""A move between two bins in ONE warehouse, as Intacct's two legs.
+
+	The same out-and-in pair a warehouse transfer uses, with the warehouse identical on
+	both sides and only the bin differing. Intacct is the only system that holds stock per
+	bin, so this pair is the entire movement — there is no ERPNext side to keep in step.
+
+	Both bins are required. A blank one here cannot fall back to the warehouse default the
+	way a warehouse transfer's can: the default IS a bin, so falling back would produce a
+	document that moves stock out of a bin and straight back into the same one.
+
+	`lines` are dicts of item_code, qty, uom, unit_cost, and optionally lot.
+	"""
+	if not warehouse:
+		raise ValueError("a bin transfer needs a warehouse")
+	if not source_bin or not target_bin:
+		raise ValueError("both bins are required")
+	if source_bin == target_bin:
+		raise ValueError(f"{source_bin} is both the source and the destination")
+
+	out_legs = []
+	in_legs = []
+
+	for line in lines:
+		item = line.get("item_code")
+		qty = float(line.get("qty") or 0)
+		if qty <= 0:
+			raise ValueError(f"{item}: quantity must be positive, got {qty}")
+		if not line.get("uom"):
+			raise ValueError(f"{item}: unit is required and must match the item's UOM exactly")
+
+		cost = float(line.get("unit_cost") or 0)
+		if cost <= 0:
+			raise ValueError(
+				f"{item}: no unit cost for the stock in {warehouse}. The arriving leg is "
+				"valued at what is sent, so a zero would write the item's value down to "
+				"nothing."
+			)
+
+		lot = (line.get("lot") or "").strip() or None
+
+		out_legs.append(
+			{
+				"item_id": item,
+				"warehouse_id": warehouse,
+				"quantity": qty,
+				"unit": line["uom"],
+				"bin": source_bin,
+				"lot": lot,
+			}
+		)
+		in_legs.append(
+			{
+				"item_id": item,
+				"warehouse_id": warehouse,
+				"quantity": qty,
+				"unit": line["uom"],
+				"bin": target_bin,
+				"lot": lot,
+				"cost": cost,
+			}
+		)
+
+	if not out_legs:
+		raise ValueError("a bin transfer must move something")
+
+	return {"out": out_legs, "in": in_legs}
+
 def produced_unit_cost(consumed, produced_qty):
 	"""Unit cost of what was made, from the cost of what was actually consumed.
 

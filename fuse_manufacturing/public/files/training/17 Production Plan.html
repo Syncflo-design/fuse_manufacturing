@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production Plan — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 17</p>
+	<h1>Production Plan</h1>
+	<p class="standfirst">Working out what to make and what to buy — Fuse Manufacturing user guide 17</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What a production plan is</h3>
+<p>You have demand — sales orders, a forecast, or a figure somebody has decided on. A
+production plan takes that demand, reads it through the BOMs, and tells you two things:</p>
+<ol>
+<li><strong>What to make</strong>, and in what order, once sub-assemblies are taken into account.</li>
+<li><strong>What to buy</strong>, once what is already on the shelf and already on order is taken off.</li>
+</ol>
+<p>Then it raises the works orders and material requests to match, in one go.</p>
+<h3>Why not just raise the works orders</h3>
+<p>Because the arithmetic is where the mistakes are. Demand for a hundred finished units is
+not demand for a hundred of each component — some are already in stock, some are on order,
+some go into a sub-assembly that itself needs making first. Doing that by hand is where a
+shortage gets missed.</p>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, Quick Launch row, Production Plan tile</span></figure>
+<h2>Building a plan</h2>
+<h3>Step 1 — Say where the demand comes from</h3>
+<ol>
+<li>On Fuse Home, click <strong>Production Plan</strong>, then <strong>Add Production Plan</strong>.</li>
+<li>Set <strong>Get Items From</strong>:
+   - <strong>Sales Order</strong> — plan against real customer orders.
+   - <strong>Material Request</strong> — plan against internal asks (see guide 15).
+   - Leave it unset and add the items by hand, which is what you do for a forecast or a
+     make-to-stock run.</li>
+<li>If you are pulling from orders, filter by customer or date and click <strong>Get Sales
+   Orders</strong>, then <strong>Get Items for Work Order</strong>.</li>
+</ol>
+<h3>Step 2 — Check what is to be made</h3>
+<p>The <strong>Items to Manufacture</strong> table now lists each finished item, how many, and the BOM it
+will use.</p>
+<p>Check the BOM on each line. Where an item has more than one, the default is used and it is
+not always the one you meant.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Production Plan, Items to Manufacture table</span></figure>
+<h3>Step 3 — Work out the materials</h3>
+<ol>
+<li>Tick <strong>Include Non Stock Items</strong> and <strong>Include Sub-assembly Items</strong> as your process
+   requires. Sub-assemblies matter: leave it off and the plan assumes they already exist.</li>
+<li>Set the <strong>warehouse</strong> the material is to come from.</li>
+<li>Click <strong>Get Raw Materials for Production</strong>.</li>
+</ol>
+<p>The <strong>Material Request Plan</strong> table fills in with what is needed, and — this is the useful
+part — what is actually short:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What it tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Required Qty</td>
+<td>What the BOMs call for</td>
+</tr>
+<tr>
+<td>Available Qty</td>
+<td>What is on the shelf now</td>
+</tr>
+<tr>
+<td>Ordered Qty</td>
+<td>What is already on its way</td>
+</tr>
+<tr>
+<td>Quantity</td>
+<td>What still has to be requested</td>
+</tr>
+</tbody>
+</table></div>
+<p>A line with a Quantity of zero needs nothing doing. The lines with a number are your
+shortage list.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">Production Plan, Material Request Plan table with shortfalls</span></figure>
+<h3>Step 4 — Submit, then raise the documents</h3>
+<ol>
+<li><strong>Submit</strong> the plan.</li>
+<li><strong>Create Work Orders</strong> — one per line in Items to Manufacture, in dependency order so a
+   sub-assembly is made before the thing it goes into.</li>
+<li><strong>Create Material Requests</strong> — one per shortage. On an integrated site these are
+   requisitions; the purchase order itself is raised in Intacct.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">submitted Production Plan with the work order links</span></figure>
+<h2>After the plan</h2>
+<p>Each works order runs its own course — issue to WIP, record production, inspect, put away.
+See guides 03, 04, 05 and 13.</p>
+<p>The plan stays as the record of why those works orders exist and what demand they were
+raised against. When somebody asks in three weeks why four hundred were made, this is the
+answer.</p>
+<h2>Common questions</h2>
+<h3>The available quantity looks wrong</h3>
+<p>It is read from the warehouse you set in step 3. Material sitting in a different warehouse
+is not counted, which is usually the explanation.</p>
+<h3>It wants to buy something we already have plenty of</h3>
+<p>Check the warehouse again, and check whether the stock is in a WIP warehouse rather than
+stores. A plan can only see where you point it.</p>
+<h3>Can I plan without sales orders?</h3>
+<p>Yes — leave Get Items From unset and add the finished items and quantities by hand. That
+is the normal way to plan a make-to-stock run or a forecast.</p>
+<h3>I raised the works orders and then the demand changed</h3>
+<p>Cancel the works orders that are not needed. The plan itself is a record and stays; it is
+not a live document that keeps re-planning.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

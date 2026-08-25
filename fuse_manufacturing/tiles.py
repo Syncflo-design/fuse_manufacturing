@@ -1,49 +1,68 @@
 """Tiles this app contributes to the Fuse home page.
 
 Almost every Fuse tile lives in fuse_theme, which is right: the home page is the theme's
-job. What belongs here is the one tile whose ROUTE depends on a setting this app owns.
+job. Two belong here instead.
 
-Item Transfer normally opens ERPNext's Stock Entry form. With Use Simple Warehouse
-Transfer switched on it opens Fuse Stock Transfer instead. The theme has no business
-knowing that a manufacturing setting exists, so this app replaces its own tile rather
-than the theme reading a field it does not own.
+Warehouse Transfer normally opens ERPNext's Stock Entry form. With Use Simple Warehouse
+Transfer switched on it opens Fuse Stock Transfer instead — a route that depends on a
+setting this app owns, so this app replaces its own tile rather than the theme reading a
+field it has no business knowing about.
+
+Bin Transfer has no counterpart in the theme at all. It moves stock between bins inside
+one warehouse, which only exists because Intacct tracks bins, so it belongs to the app
+that talks to Intacct.
 """
 
 import frappe
 
+TRANSFER_ROLES = ["Stock Controller", "Stock User", "Stock Manager"]
+
 
 def get_tiles():
-	"""The Item Transfer tile, but only when it needs to differ from the theme's.
+	"""This app's tiles, in the shape the theme's own list uses.
 
-	Returns nothing at all in the ordinary case. A tile returned here REPLACES the theme's
-	tile of the same key, so returning one unconditionally would mean this app quietly
-	owning a tile it has no reason to own.
+	A tile returned here REPLACES a theme tile of the same key, which is how the transfer
+	tile changes where it goes. The bin tile has a key of its own and is simply added; the
+	theme switches it off through the Active Modules table like every other tile.
 	"""
-	if not _simple_transfer_on():
-		return []
+	tiles = []
 
-	return [
+	if _setting("use_simple_warehouse_transfer"):
+		tiles.append(
+			{
+				"key": "item_transfer",
+				"label": "Warehouse Transfer",
+				"blurb": "Move stock between warehouses",
+				"icon": "⇄",
+				"route": ["new", "Fuse Stock Transfer"],
+				"roles": TRANSFER_ROLES,
+			}
+		)
+
+	tiles.append(
 		{
-			"key": "item_transfer",
-			"label": "Warehouse Transfer",
-			"blurb": "Move stock between warehouses",
-			"icon": "⇄",
-			"route": ["new", "Fuse Stock Transfer"],
-			"roles": ["Stock Controller", "Stock User", "Stock Manager"],
+			# Sits next to Warehouse Transfer, and reads as its smaller sibling: same idea,
+			# one warehouse. Switched off by default — see the bin_transfer module.
+			"key": "bin_transfer",
+			"label": "Bin Transfer",
+			"blurb": "Move stock between bins in one warehouse",
+			"icon": "⇅",
+			"route": ["new", "Fuse Bin Transfer"],
+			"roles": TRANSFER_ROLES,
 		}
-	]
+	)
+
+	return tiles
 
 
-def _simple_transfer_on():
-	"""Whether this site uses Fuse's own transfer screen.
+def _setting(fieldname):
+	"""One checkbox off Intacct Settings.
 
 	Fails to FALSE, deliberately. Every way this can fail — settings not migrated yet, the
-	field not created yet on a first load after deploy — means the site is not yet set up
-	for the simple screen, and the theme's own tile is the safe answer.
+	field not created yet on a first load after a deploy — means the site is not yet set up
+	for whatever the switch turns on, and the plainer answer is the safe one.
 	"""
 	try:
-		return bool(
-			frappe.db.get_single_value("Intacct Settings", "use_simple_warehouse_transfer")
-		)
+		return bool(frappe.db.get_single_value("Intacct Settings", fieldname))
 	except Exception:
 		return False

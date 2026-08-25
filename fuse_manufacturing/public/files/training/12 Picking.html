@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picking — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 12</p>
+	<h1>Picking</h1>
+	<p class="standfirst">Sending goods out against a customer order — Fuse Manufacturing user guide 12</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What picking is</h3>
+<p>A customer has ordered goods. Picking is where you record what actually went out the door:
+how much of each line, from which warehouse, and — where the item is tracked — which bin
+and which lot.</p>
+<p>Recording it does two things at once. The stock leaves Fuse, and a shipper is created in
+Sage Intacct against the same order. Intacct goes first, so the two systems cannot
+disagree about a despatch.</p>
+<h3>Where the orders come from</h3>
+<p><strong>Sales orders are never created in Fuse.</strong> They are raised in Intacct and mirrored here
+read-only, so the warehouse can see what is due to go out. You can pick against one; you
+cannot edit it, and you cannot invent one.</p>
+<p>If an order you expect is not in the list, it is not open in Intacct. Check there rather
+than looking for a way to add it here.</p>
+<h3>What Fuse posts, and what it does not</h3>
+<p>Picking relieves <strong>quantity only</strong>. The invoice is still raised in Intacct, against the
+shipper this creates. That split is deliberate: the warehouse says what went out, and
+accounts decide what to charge for it.</p>
+<h3>Before you pick anything</h3>
+<ul>
+<li>Have the order number or the customer's name.</li>
+<li>Know what is actually going on the vehicle, not what was ordered.</li>
+<li>For lot-tracked items, know which lot you are shipping. It is what makes a recall
+  possible later.</li>
+</ul>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, Quick Launch row, Picking tile</span></figure>
+<h2>Finding the order</h2>
+<ol>
+<li>On Fuse Home, click <strong>Picking</strong>.</li>
+<li>A list opens showing every order still expecting a despatch: the Intacct order number,
+   the customer, when it was ordered, when it is due, and how much has gone so far.</li>
+<li>Use the search box. It matches the Intacct order number, the Fuse order number and the
+   customer's name, so whatever is on the paperwork in your hand will find it.</li>
+<li>Click the row.</li>
+</ol>
+<p>A fully despatched order drops off the list. The list is what is still to go, not a
+history.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Picking screen, order list</span></figure>
+<h2>Recording the despatch</h2>
+<h3>Step 1 — Read the lines</h3>
+<p>The order opens with one row per ordered line:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What it tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Item</td>
+<td>The item code and its description</td>
+</tr>
+<tr>
+<td>Ordered</td>
+<td>How much the customer asked for</td>
+</tr>
+<tr>
+<td>Already picked</td>
+<td>How much has gone on earlier despatches</td>
+</tr>
+<tr>
+<td>Still to go</td>
+<td>The difference, and the figure to check against the vehicle</td>
+</tr>
+<tr>
+<td>Picking</td>
+<td>What you are sending now — the only column you fill in</td>
+</tr>
+</tbody>
+</table></div>
+<h3>Step 2 — Enter what is going</h3>
+<p>Type the quantity against each line. Leave a line at zero if none of it is going today;
+the order stays open for the rest.</p>
+<p>You can send more than was ordered only if the site allows over-delivery, and only up to
+the tolerance an administrator has set. Beyond it the despatch is refused, which is the
+right answer — a customer who ordered a hundred did not agree to two hundred.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">Picking screen, order lines with quantities entered</span></figure>
+<h3>Step 3 — Bins and lots</h3>
+<p>Where an item is tracked in Intacct, two extra fields appear on the line:</p>
+<ul>
+<li><strong>Bin</strong> — which bin the stock was picked from. If your warehouse has a default, it is
+  filled in for you and you only change it when the pick came from somewhere else.</li>
+<li><strong>Lot</strong> — which lot went out. Required on a lot-tracked item; the despatch is refused
+  without it, because a lot nobody recorded is a recall nobody can trace.</li>
+</ul>
+<h3>Step 4 — Scanning</h3>
+<p>Click <strong>Scan Barcode</strong> and scan the item, the bin label or the pallet. Fuse recognises
+which of the three it is and fills the right field. Scanning the same item twice increases
+the quantity rather than adding a row.</p>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">Picking screen with the scan field active</span></figure>
+<h3>Step 5 — Quality, where it applies</h3>
+<p>If an item is set to be inspected before delivery, the line asks for an inspection before
+it will go.</p>
+<ul>
+<li>No inspection at all — the despatch is refused and the line is named.</li>
+<li>An inspection that failed — also refused. Product that did not meet its own
+  specification does not leave on this document. Releasing it anyway is a concession, and
+  that is a decision someone makes deliberately, not something to nod past on a phone.</li>
+</ul>
+<p>Record the inspection from the line itself. See guide 13 Quality Inspection.</p>
+<h3>Step 6 — Submit</h3>
+<p>Click <strong>Submit</strong>.</p>
+<p>Fuse creates a delivery note and posts a shipper to Intacct against the ordered lines. If
+Intacct accepts it, the goods have gone in both systems. If it refuses, nothing stands
+here either and the reason is shown.</p>
+<figure class="shot"><span class="label">Screenshot 5</span><span class="what">submitted delivery note with the Intacct key</span></figure>
+<h2>After it is submitted</h2>
+<p>The delivery note carries the Intacct document key. The order in Intacct now shows the
+quantity despatched, and accounts can invoice against the shipper.</p>
+<h2>Common questions</h2>
+<h3>The order is not in the list</h3>
+<p>It is either fully despatched, or not open in Intacct. The list only shows what is still
+to go.</p>
+<h3>The customer wants part of the order now and the rest later</h3>
+<p>Enter what is going today and submit. The order stays open for the balance and appears in
+the list again tomorrow.</p>
+<h3>I have picked the wrong thing</h3>
+<p>Cancel the delivery note. The shipper is reversed in Intacct as a new document and the
+ordered line goes back to outstanding. Then pick it again correctly.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>

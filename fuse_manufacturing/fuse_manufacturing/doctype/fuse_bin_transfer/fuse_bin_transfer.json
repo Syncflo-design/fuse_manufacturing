@@ -1,0 +1,241 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-25 09:00:00.000000",
+ "description": "Move stock from one bin to another inside a single warehouse. The quantity in the warehouse does not change, so there is no Stock Entry behind this - the movement is recorded here and posted to Intacct, which is where stock is held per bin.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "column_break_head",
+  "date_issued",
+  "amended_from",
+  "route_section",
+  "warehouse",
+  "bins_section",
+  "source_bin",
+  "column_break_arrow",
+  "arrow_html",
+  "column_break_target",
+  "target_bin",
+  "items_section",
+  "scan_barcode",
+  "items",
+  "result_section",
+  "intacct_key",
+  "intacct_posted_on",
+  "column_break_result",
+  "intacct_reversal_key",
+  "intacct_reversed_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "FUSE-BIN-.YYYY.-",
+   "default": "FUSE-BIN-.YYYY.-",
+   "reqd": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_issued",
+   "fieldtype": "Datetime",
+   "label": "Moved on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Fuse Bin Transfer",
+   "read_only": 1,
+   "print_hide": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "route_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Both bins live in this warehouse. Stock does not leave it."
+  },
+  {
+   "fieldname": "bins_section",
+   "fieldtype": "Section Break",
+   "label": "Bin to bin"
+  },
+  {
+   "fieldname": "source_bin",
+   "fieldtype": "Link",
+   "label": "From bin",
+   "options": "Intacct Bin",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_arrow",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "arrow_html",
+   "fieldtype": "HTML",
+   "options": "<div style=\"display:flex; justify-content:center; align-items:center; height:100%;\"><svg viewBox=\"0 0 400 80\" style=\"width:100%; max-width:200px; height:auto;\"><defs><marker id=\"fuse-bin-arrow\" markerWidth=\"12\" markerHeight=\"12\" refX=\"9\" refY=\"6\" orient=\"auto\" markerUnits=\"strokeWidth\"><path d=\"M0,0 L12,6 L0,12 Z\" fill=\"currentColor\"/></marker></defs><line x1=\"20\" y1=\"40\" x2=\"360\" y2=\"40\" stroke=\"currentColor\" stroke-width=\"5\" stroke-linecap=\"round\" marker-end=\"url(#fuse-bin-arrow)\"/></svg></div>"
+  },
+  {
+   "fieldname": "column_break_target",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_bin",
+   "fieldtype": "Link",
+   "label": "To bin",
+   "options": "Intacct Bin",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items to move"
+  },
+  {
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "Scan barcode",
+   "options": "Barcode",
+   "hidden": 1
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Fuse Bin Transfer Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Recorded in Intacct",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "intacct_key",
+   "fieldtype": "Data",
+   "label": "Intacct Key",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "Keys of the two documents this created - the stock out of one bin and into the other."
+  },
+  {
+   "fieldname": "intacct_posted_on",
+   "fieldtype": "Datetime",
+   "label": "Posted to Intacct",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "intacct_reversal_key",
+   "fieldtype": "Data",
+   "label": "Reversal Key",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "intacct_reversed_on",
+   "fieldtype": "Datetime",
+   "label": "Reversed in Intacct",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-08-25 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse Bin Transfer",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Controller",
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "warehouse,source_bin,target_bin",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse Transfer — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 02</p>
+	<h1>Warehouse Transfer</h1>
+	<p class="standfirst">Moving stock from one warehouse to another — Fuse Manufacturing user guide 02</p>
+</header>
+<main>
+<h2>Before you start</h2>
+<h3>What a warehouse transfer is</h3>
+<p>Stock is in one warehouse and needs to be in another. Nothing is bought, sold, made or
+consumed — the same goods simply change place.</p>
+<p>Recording it does two things at once. The stock moves in Fuse, and the same movement is
+posted to Sage Intacct. Intacct goes first, so the two systems cannot end up disagreeing
+about where the stock is.</p>
+<h3>Two screens, one job</h3>
+<p>Your site is set up with one of two screens, and an administrator chooses which under
+<strong>Use Simple Warehouse Transfer</strong> in Intacct Settings:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Screen</th>
+<th>What it looks like</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fuse's transfer screen</td>
+<td>A from, a to, and a list of items. The item picker only offers what the source warehouse actually holds.</td>
+</tr>
+<tr>
+<td>ERPNext's Stock Entry form</td>
+<td>The full form, with every field a stock movement can carry.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Both record exactly the same movement and post the same thing to Intacct. The difference
+is how much the person moving the stock has to look at. This guide covers Fuse's screen;
+if yours looks different, see guide 06 Stock Control.</p>
+<h3>Before you record anything</h3>
+<ul>
+<li>Know which warehouse the stock is leaving and which it is going to.</li>
+<li>Know what is actually moving, and how much. Not what was asked for — what is on the
+  trolley.</li>
+<li>If your items are bin or lot tracked in Intacct, know which bin it came out of, which
+  bin it is going into, and which lot.</li>
+</ul>
+<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, Quick Launch row, Warehouse Transfer tile</span></figure>
+<h2>Recording the transfer</h2>
+<h3>Step 1 — Set the route</h3>
+<ol>
+<li>On Fuse Home, click <strong>Warehouse Transfer</strong>.</li>
+<li>In <strong>From</strong>, choose the warehouse the stock is leaving.</li>
+<li>In <strong>To</strong>, choose the warehouse it is going to.</li>
+</ol>
+<p>Set the From warehouse before you add any items. The item list is drawn from what that
+warehouse holds, so choosing it first is what makes the picker useful.</p>
+<p>If you pick the same warehouse on both sides the transfer is refused. Nothing would move,
+so there is nothing to record.</p>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">Fuse Stock Transfer, route section with the arrow between the two warehouses</span></figure>
+<h3>Step 2 — Add what is moving</h3>
+<ol>
+<li>In <strong>Items to move</strong>, click <strong>Add Row</strong>.</li>
+<li>Start typing in the <strong>Item</strong> column. Only items the From warehouse actually holds are
+   offered, and you can search on the item code or on its description.</li>
+<li>Pick the item. A message tells you how much of it is on hand in that warehouse.</li>
+<li>Type the <strong>Quantity</strong>.</li>
+<li>Repeat for everything on the trolley.</li>
+</ol>
+<p>The unit is filled in for you from the item and cannot be changed here. It has to match
+Intacct's unit for that item exactly, so it is not something to type.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">items grid with two rows added and the on-hand alert visible</span></figure>
+<h3>Step 3 — Bins and lots, where the item has them</h3>
+<p>Two extra columns appear on the grid, but only when something on the document needs them:</p>
+<ul>
+<li><strong>From bin</strong> and <strong>To bin</strong> appear as soon as you add an item that Intacct tracks in
+  bins. Each side is filled separately, because the stock leaves a bin in one warehouse
+  and lands in a bin in the other. The picker only offers bins that belong to the
+  warehouse on that side.</li>
+<li><strong>Lot</strong> appears for items Intacct tracks by lot. Say which lot moved.</li>
+</ul>
+<p>Leave a bin blank and the warehouse's default bin is used. Leave a lot blank on a
+lot-tracked item and the transfer is refused — Intacct will not accept the movement
+without one, and it is better to be told here than after the goods have gone.</p>
+<p>If neither column has appeared, nothing on this document is tracked and there is nothing
+to fill in.</p>
+<figure class="shot"><span class="label">Screenshot 4</span><span class="what">items grid showing From bin, To bin and Lot columns</span></figure>
+<h3>Step 4 — Scanning instead of typing</h3>
+<p>If you have a scanner:</p>
+<ol>
+<li>Click <strong>Scan Barcode</strong> at the top of the screen.</li>
+<li>Scan an item. It is added to the list with a quantity of one.</li>
+<li>Scan the same item again and the quantity goes up by one rather than adding a second
+   row.</li>
+<li>Click <strong>Done Scanning</strong> when you have finished, then correct any quantities by hand.</li>
+</ol>
+<h3>Step 5 — Submit</h3>
+<p>Click <strong>Submit</strong>.</p>
+<p>At that moment Fuse asks Intacct to record the movement. If Intacct accepts it, the
+transfer stands and the stock has moved in both systems. If Intacct refuses it — a closed
+period, a warehouse it does not recognise, a bin that does not exist — the transfer does
+not stand here either, and the reason is shown on screen.</p>
+<figure class="shot"><span class="label">Screenshot 5</span><span class="what">submitted Fuse Stock Transfer showing the linked Stock Entry</span></figure>
+<h2>After it is submitted</h2>
+<p><strong>Recorded as</strong> shows the Stock Entry the transfer created. That is the movement itself,
+and the Intacct document key is on it. Click through if anyone needs to reconcile the two
+systems.</p>
+<h2>Common questions</h2>
+<h3>The item I need is not in the list</h3>
+<p>It is not in the From warehouse. Either it is somewhere else — check the warehouse — or
+it has never been received into that warehouse at all.</p>
+<h3>It says the warehouse does not hold enough</h3>
+<p>The quantity you are moving is more than the warehouse shows. Check whether the same item
+is on the document twice: two rows of forty are eighty, and each row looked fine on its
+own.</p>
+<p>If the figure on screen genuinely disagrees with what is on the shelf, that is a stock
+accuracy problem, not a transfer problem. Raise it rather than working around it.</p>
+<h3>I have chosen the wrong warehouse after adding items</h3>
+<p>Change it. Any bins you had picked are cleared, because they belonged to the old
+warehouse, and you are told how many were cleared. The items themselves stay — check they
+are all still held in the new From warehouse.</p>
+<h3>I need to undo a transfer</h3>
+<p>Cancel it. Cancelling posts the reverse movement to Intacct as a new document, so both
+systems agree again. Intacct keeps the original and the undo; nothing is deleted, which
+is what an audit trail is for.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>
