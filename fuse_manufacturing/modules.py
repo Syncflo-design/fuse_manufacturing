@@ -59,7 +59,7 @@ MODULES = [
 	},
 	{
 		"key": "item_transfer",
-		"label": "Item Transfer",
+		"label": "Warehouse Transfer",
 		"description": "Move stock between warehouses.",
 	},
 	{

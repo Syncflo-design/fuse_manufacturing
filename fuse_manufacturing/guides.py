@@ -17,7 +17,7 @@ not with the order they were written.
 # Path is relative to /assets/fuse_manufacturing/files/.
 GUIDES = [
 	{"title": "Getting Started", "file": "training/01 Getting Started.pdf"},
-	{"title": "Item Transfer", "file": "training/02 Item Transfer.pdf"},
+	{"title": "Warehouse Transfer", "file": "training/02 Item Transfer.pdf"},
 	{"title": "Issue to WIP", "file": "training/03 Issue to WIP.pdf"},
 ]
 

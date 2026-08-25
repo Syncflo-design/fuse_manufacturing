@@ -25,7 +25,7 @@ def get_tiles():
 	return [
 		{
 			"key": "item_transfer",
-			"label": "Item Transfer",
+			"label": "Warehouse Transfer",
 			"blurb": "Move stock between warehouses",
 			"icon": "⇄",
 			"route": ["new", "Fuse Stock Transfer"],
