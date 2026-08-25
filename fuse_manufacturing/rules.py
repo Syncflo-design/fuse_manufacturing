@@ -198,6 +198,80 @@ def transfer_legs(lines):
 	return legs
 
 
+
+def detailed_transfer_legs(lines):
+	"""A warehouse transfer as TWO documents, for stock Intacct tracks in bins or lots.
+
+	The plain ICTRANSFER used elsewhere is one document and cannot carry either: its line
+	object has no bin and no lot field at all. So a tracked transfer is posted the way
+	Intacct itself models one internally — an out document and an in document, against two
+	transaction definitions:
+
+	  transfer_out — stock leaves, NO cost. The definition does not value this leg, and a
+	                 cost sent here would override Intacct's own costing of what left.
+	  transfer_in  — stock arrives, WITH the unit cost it left at. The definition has
+	                 UPDATES_COST=true, so whatever is sent becomes the arriving value.
+
+	That cost is what keeps the move value-neutral. Omitting it does not mean "no change" —
+	it means Intacct values the arrival itself, and the difference lands in the ledger as a
+	revaluation nobody asked for. Hence a missing or zero cost is refused, not defaulted.
+
+	`lines` are dicts of item_code, qty, uom, from_warehouse, to_warehouse, unit_cost, and
+	optionally source_bin, target_bin, lot. Quantities are POSITIVE on both legs — each
+	definition applies its own sign.
+	"""
+	out_legs = []
+	in_legs = []
+
+	for line in lines:
+		item = line.get("item_code")
+		qty = float(line.get("qty") or 0)
+		if qty <= 0:
+			raise ValueError(f"{item}: quantity must be positive, got {qty}")
+		if not line.get("from_warehouse") or not line.get("to_warehouse"):
+			raise ValueError(f"{item}: both warehouses are required")
+		if line["from_warehouse"] == line["to_warehouse"]:
+			raise ValueError(f"{item}: source and destination are the same warehouse")
+		if not line.get("uom"):
+			raise ValueError(f"{item}: unit is required and must match the item's UOM exactly")
+
+		cost = float(line.get("unit_cost") or 0)
+		if cost <= 0:
+			raise ValueError(
+				f"{item}: no unit cost for the stock leaving {line['from_warehouse']}. The "
+				"arriving leg is valued at what is sent, so a zero would write the item's "
+				"value down to nothing."
+			)
+
+		lot = (line.get("lot") or "").strip() or None
+
+		out_legs.append(
+			{
+				"item_id": item,
+				"warehouse_id": line["from_warehouse"],
+				"quantity": qty,
+				"unit": line["uom"],
+				"bin": (line.get("source_bin") or "").strip() or None,
+				"lot": lot,
+			}
+		)
+		in_legs.append(
+			{
+				"item_id": item,
+				"warehouse_id": line["to_warehouse"],
+				"quantity": qty,
+				"unit": line["uom"],
+				"bin": (line.get("target_bin") or "").strip() or None,
+				"lot": lot,
+				"cost": cost,
+			}
+		)
+
+	if not out_legs:
+		raise ValueError("a transfer must move something")
+
+	return {"out": out_legs, "in": in_legs}
+
 def produced_unit_cost(consumed, produced_qty):
 	"""Unit cost of what was made, from the cost of what was actually consumed.
 

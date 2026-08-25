@@ -39,6 +39,22 @@ PROCESSES = [
 		"required": 1,
 	},
 	{
+		"key": "transfer_out",
+		"label": "Warehouse transfer — stock out",
+		"description": "The decrease leg of a transfer between warehouses, used only where bins or lots are involved. Sends no cost; Intacct values what leaves at its own costing method.",
+		"source": "Inventory",
+		"seed": "Inv Transfer Out Qty Value",
+		"required": 0,
+	},
+	{
+		"key": "transfer_in",
+		"label": "Warehouse transfer — stock in",
+		"description": "The increase leg of the same transfer. Carries the cost the stock left at, so the move is value-neutral rather than revaluing the item on arrival.",
+		"source": "Inventory",
+		"seed": "Inv Transfer In Qty Value",
+		"required": 0,
+	},
+	{
 		"key": "manufacture_produce",
 		"label": "Production — finished goods in",
 		"description": "The increase leg of a production run. Carries the cost, worked out from what was consumed.",

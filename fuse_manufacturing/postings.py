@@ -82,6 +82,9 @@ def build_transfer_xml(*, transaction_date, reference_no, description, legs, loc
 #
 #   produce    Increase, UPDATES_COST=true    unproduce  Decrease, no cost
 #   consume    Decrease, no cost              unconsume  Increase, UPDATES_COST=true
+TRANSFER_OUT = "transfer_out"
+TRANSFER_IN = "transfer_in"
+
 MANUFACTURING_PRODUCE = "manufacture_produce"
 MANUFACTURING_CONSUME = "manufacture_consume"
 MANUFACTURING_UNPRODUCE = "manufacture_unproduce"
@@ -180,7 +183,19 @@ def _intacct_warehouse(warehouse):
 
 @frappe.whitelist()
 def post_stock_entry_transfer(stock_entry, dry_run=False):
-	"""Post an ERPNext Material Transfer to Intacct as one ICTRANSFER.
+	"""Post an ERPNext Material Transfer to Intacct.
+
+	Two shapes, and which one is used depends on what the stock is:
+
+	  Untracked — ONE ICTRANSFER carrying both halves. Intacct moves the value with the
+	              quantity, so nothing has to be restated and nothing can drift.
+	  Bin or lot tracked — an out document and an in document, because ICTRANSFERITEM has
+	              no bin field and no lot field to put the detail in. Verified against the
+	              object schema, not inferred: the fields are absent, not merely unused.
+
+	The route is chosen from how Intacct tracks the ITEM, never from whether a bin happens
+	to be filled in. A missed bin has to fail as a missed bin, not quietly take the route
+	that cannot carry one.
 
 	`dry_run=True` returns the exact XML that WOULD be sent, without sending it. Use it
 	to check a posting before it touches a real company.
@@ -196,21 +211,10 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a transfer.")
 
 	entity = gateway.entity_for_company(doc.company)
+	lines, tracked = _transfer_lines(doc)
 
-	lines = []
-	for row in doc.items:
-		lines.append(
-			{
-				"item_code": row.item_code,
-				"qty": row.qty,
-				# The unit must match the item's UOM character for character or the line
-				# is rejected with BL03000018 "Missing unit". Taken from the Item, never
-				# from the transaction header — the header carries ERPNext's own default.
-				"uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
-				"from_warehouse": _intacct_warehouse(row.s_warehouse),
-				"to_warehouse": _intacct_warehouse(row.t_warehouse),
-			}
-		)
+	if tracked:
+		return _post_tracked_transfer(doc, lines, entity, dry_run=dry_run, purpose="transfer")
 
 	legs = rules.transfer_legs(lines)
 
@@ -239,6 +243,135 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 		purpose="transfer",
 	)
 	return {"posted": True, "intacct_key": keys[0], "legs": len(legs)}
+
+
+def _transfer_lines(doc, swap=False):
+	"""The rows of a transfer, and whether any of them is tracked stock.
+
+	Returns `(lines, tracked)`. Every line carries everything BOTH routes need, so the
+	caller decides the shape once instead of reading the document twice and risking the
+	two reads disagreeing.
+
+	`swap=True` turns the movement round for a reversal. Warehouses and bins swap together
+	— a reversal that swapped the warehouses but left the bins alone would put the stock
+	back in a bin that belongs to the other warehouse.
+	"""
+	lines = []
+	tracked = False
+
+	for row in doc.items:
+		if flt(row.qty) <= 0:
+			continue
+
+		item = frappe.db.get_value(
+			"Item",
+			row.item_code,
+			["stock_uom", "custom_intacct_lot_tracked", "custom_intacct_bin_tracked"],
+			as_dict=True,
+		)
+
+		source, target = row.s_warehouse, row.t_warehouse
+		source_bin = row.get("custom_intacct_source_bin")
+		target_bin = row.get("custom_intacct_target_bin")
+		if swap:
+			source, target = target, source
+			source_bin, target_bin = target_bin, source_bin
+
+		# Falls back to the warehouse's default bin, which is what an operator who was
+		# never asked for one would have picked anyway. Returns None for an item Intacct
+		# does not track bins on — sending a bin for one of those is rejected outright.
+		source_bin = source_bin or _default_bin(source, row.item_code)
+		target_bin = target_bin or _default_bin(target, row.item_code)
+
+		lot = (row.get("custom_intacct_lot") or "").strip() or None
+
+		if item.custom_intacct_bin_tracked:
+			tracked = True
+			for warehouse, bin_id in ((source, source_bin), (target, target_bin)):
+				if not bin_id:
+					frappe.throw(
+						f"Row {row.idx} ({row.item_code}) is bin tracked in Intacct, so the "
+						f"transfer has to say which bin in {warehouse}. {warehouse} has no "
+						"default bin either — run the bins sync, or pick one on the line."
+					)
+
+		if item.custom_intacct_lot_tracked:
+			tracked = True
+			if not lot:
+				frappe.throw(
+					f"Row {row.idx} ({row.item_code}) is lot tracked in Intacct, so the "
+					"transfer has to say which lot moved."
+				)
+
+		lines.append(
+			{
+				"item_code": row.item_code,
+				"qty": flt(row.qty),
+				# The unit must match the item's UOM character for character or the line
+				# is rejected with BL03000018 "Missing unit". Taken from the Item, never
+				# from the transaction header — the header carries ERPNext's own default.
+				"uom": item.stock_uom,
+				"from_warehouse": _intacct_warehouse(source),
+				"to_warehouse": _intacct_warehouse(target),
+				"source_bin": source_bin,
+				"target_bin": target_bin,
+				"lot": lot,
+				# What the stock is worth on the way out. ERPNext holds this because
+				# Intacct gave it to us in the first place, which is the same reasoning
+				# that lets a production run send the cost of what it consumed.
+				"unit_cost": flt(row.basic_rate) or flt(row.valuation_rate),
+			}
+		)
+
+	if not lines:
+		frappe.throw(f"{doc.name} has nothing to move.")
+
+	return lines, tracked
+
+
+def _post_tracked_transfer(doc, lines, entity, *, dry_run, purpose):
+	"""The two-document form of a transfer, for stock held in bins or lots.
+
+	Posted ATOMICALLY. The two halves are separate transaction definitions so they cannot
+	share a document, but a half-posted transfer is stock that left one warehouse and
+	arrived nowhere — the same hole a half-posted production run leaves.
+	"""
+	legs = rules.detailed_transfer_legs(lines)
+
+	out_fn = build_ictransaction_xml(
+		definition=mapped_definition(TRANSFER_OUT),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["out"],
+		location_id=entity,
+	)
+	in_fn = build_ictransaction_xml(
+		definition=mapped_definition(TRANSFER_IN),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["in"],
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"tracked": True,
+			"entity": entity,
+			"out_xml": ET.tostring(out_fn, encoding="unicode"),
+			"in_xml": ET.tostring(in_fn, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[out_fn, in_fn],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose=purpose,
+		atomic=True,
+	)
+	result = {"intacct_keys": keys, "tracked": True, "legs": len(legs["out"]) * 2}
+	result["reversed" if purpose.endswith("-reverse") else "posted"] = True
+	return result
 
 
 @frappe.whitelist()
@@ -357,8 +490,9 @@ def _manufacture_rows(doc):
 def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 	"""Undo a posted warehouse transfer by posting the same move back the other way.
 
-	A transfer is one document carrying both halves, so its reversal is simply the same
-	document with the warehouses swapped. Value follows the quantity — nothing to restate.
+	Symmetrical, unlike a production run: a transfer carries no cost asymmetry to restate,
+	so the reversal is the same movement with the ends swapped. Tracked stock swaps its
+	bins along with its warehouses and goes back through the same two definitions.
 	"""
 	doc = frappe.get_doc("Stock Entry", stock_entry)
 	if doc.purpose not in TRANSFER_PURPOSES:
@@ -366,18 +500,17 @@ def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 
 	entity = gateway.entity_for_company(doc.company)
 
-	# Swapped at the source, so transfer_legs still applies every check it applies going
+	# Swapped at the source, so the leg builders still apply every check they apply going
 	# forward — same warehouse both ends, missing unit, non-positive quantity.
-	lines = [
-		{
-			"item_code": row.item_code,
-			"qty": row.qty,
-			"uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
-			"from_warehouse": _intacct_warehouse(row.t_warehouse),
-			"to_warehouse": _intacct_warehouse(row.s_warehouse),
-		}
-		for row in doc.items
-	]
+	lines, tracked = _transfer_lines(doc, swap=True)
+
+	if tracked:
+		# A different purpose from the forward post, so the control ID differs and Intacct
+		# does not mistake the reversal for a replay of the original.
+		return _post_tracked_transfer(
+			doc, lines, entity, dry_run=dry_run, purpose="transfer-reverse"
+		)
+
 	legs = rules.transfer_legs(lines)
 
 	function = build_transfer_xml(
@@ -386,7 +519,7 @@ def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 		# route around by quietly dating the reversal today.
 		transaction_date=doc.posting_date.strftime("%m/%d/%Y"),
 		reference_no=doc.name,
-		description=f"Reversal of Fuse {doc.name}",
+		description=f"Fuse {doc.name} reversal",
 		legs=legs,
 		location_id=entity,
 	)
@@ -404,8 +537,6 @@ def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 		[function],
 		company=doc.company,
 		reference=("Stock Entry", doc.name),
-		# A different purpose from the forward post, so the control ID differs and Intacct
-		# does not mistake the reversal for a replay of the original.
 		purpose="transfer-reverse",
 	)
 	return {"reversed": True, "intacct_keys": keys, "legs": len(legs)}

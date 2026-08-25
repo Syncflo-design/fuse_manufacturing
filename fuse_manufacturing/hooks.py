@@ -134,6 +134,10 @@ fuse_processes = ["fuse_manufacturing.transactions.get_processes"]
 # and a site nobody uploaded to had an empty Training page.
 fuse_guides = ["fuse_manufacturing.guides.get_guides"]
 
+# The home page tiles this app owns. Only one, and only when a setting makes it differ
+# from the theme's own: see tiles.py.
+fuse_tiles = ["fuse_manufacturing.tiles.get_tiles"]
+
 # What this app does when a switch is toggled: withdraw or restore the doctypes behind it.
 # Core announces the change — it cannot call this app directly, and must not know it is
 # installed. Without this, turning Receiving off would take the tile away and leave the

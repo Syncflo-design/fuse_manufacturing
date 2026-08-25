@@ -161,6 +161,29 @@ CUSTOM_FIELDS = {
 			"allow_on_submit": 1,
 		},
 	],
+	"Stock Entry Detail": [
+		{
+			"fieldname": "custom_intacct_lot",
+			"fieldtype": "Data",
+			"label": "Lot",
+			"insert_after": "t_warehouse",
+			"description": "Intacct's lot number for the stock on this line, where the item is lot-tracked. Sending a lot for an item Intacct does not track is rejected with BL03001974, so it is only ever sent where the item carries one.",
+		},
+		{
+			"fieldname": "custom_intacct_source_bin",
+			"fieldtype": "Data",
+			"label": "From Bin",
+			"insert_after": "custom_intacct_lot",
+			"description": "BINID the stock leaves, where the item is bin-enabled. A transfer names a bin on each side because the two halves post as separate Intacct documents — one bin cannot stand for both.",
+		},
+		{
+			"fieldname": "custom_intacct_target_bin",
+			"fieldtype": "Data",
+			"label": "To Bin",
+			"insert_after": "custom_intacct_source_bin",
+			"description": "BINID the stock lands in, where the item is bin-enabled.",
+		},
+	],
 	"Purchase Receipt": [
 		{
 			"fieldname": "custom_intacct_section",
@@ -410,10 +433,24 @@ CUSTOM_FIELDS = {
 			"description": "On: the New button is hidden on BOMs and an insert is refused — the kit sync is the only thing that may build one. Off: BOMs can be created here as in stock ERPNext.\n\nNormally on wherever the switch above is on: a hand-built BOM would be a second recipe Intacct has never heard of, and the next sync would quietly make Intacct's the default again.",
 		},
 		{
+			"fieldname": "movements_section",
+			"fieldtype": "Section Break",
+			"label": "Stock movements",
+			"insert_after": "boms_from_intacct",
+		},
+		{
+			"fieldname": "use_simple_warehouse_transfer",
+			"fieldtype": "Check",
+			"label": "Use Simple Warehouse Transfer",
+			"default": "0",
+			"insert_after": "movements_section",
+			"description": "On: the Item Transfer tile opens Fuse's own transfer screen: a from, a to and a list of items, with the item picker limited to what the source warehouse actually holds. Off: it opens ERPNext's Stock Entry form, which does the same job with every field a Stock Entry can have.\n\nBoth post identically. This is about what the person moving the stock has to look at, not about what reaches Intacct.",
+		},
+		{
 			"fieldname": "defaults_section",
 			"fieldtype": "Section Break",
 			"label": "Defaults",
-			"insert_after": "boms_from_intacct",
+			"insert_after": "use_simple_warehouse_transfer",
 		},
 		{
 			"fieldname": "default_item_group",
