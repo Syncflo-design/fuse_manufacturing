@@ -181,6 +181,23 @@ def _intacct_warehouse(warehouse):
 	return code
 
 
+def _moves_nothing(doc):
+	"""Whether a transfer document leaves every row where it found it.
+
+	A works order that is made in the warehouse its components are stored in has no
+	separate WIP. ERPNext still raises a Material Transfer for Manufacture, because that
+	is how it records the issue against the order — but every row leaves and arrives in
+	the same place. Nothing moved, so there is nothing for Intacct to record: a transfer
+	needs two ends, and posting one would be an out and an in against the same warehouse
+	for the same quantity.
+
+	ALL rows or none. One row that stays put among rows that move is a mistake on that
+	row, not a works order without a WIP, and `rules.transfer_legs` still refuses it.
+	"""
+	rows = [row for row in doc.items if flt(row.qty) > 0]
+	return bool(rows) and all(row.s_warehouse == row.t_warehouse for row in rows)
+
+
 @frappe.whitelist()
 def post_stock_entry_transfer(stock_entry, dry_run=False):
 	"""Post an ERPNext Material Transfer to Intacct.
@@ -209,6 +226,9 @@ def post_stock_entry_transfer(stock_entry, dry_run=False):
 		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
 	if doc.purpose not in TRANSFER_PURPOSES:
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a transfer.")
+
+	if _moves_nothing(doc):
+		return {"posted": False, "reason": "no warehouse change — nothing to post"}
 
 	entity = gateway.entity_for_company(doc.company)
 	lines, tracked = _transfer_lines(doc)
@@ -498,6 +518,11 @@ def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 	if doc.purpose not in TRANSFER_PURPOSES:
 		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a transfer.")
 
+	# Nothing was posted going forward, so there is nothing to undo. Reached only by a
+	# direct call — the cancel hook already returns early on a document with no key.
+	if _moves_nothing(doc):
+		return {"reversed": False, "reason": "no warehouse change — nothing was posted"}
+
 	entity = gateway.entity_for_company(doc.company)
 
 	# Swapped at the source, so the leg builders still apply every check they apply going
@@ -654,8 +679,14 @@ def on_stock_entry_submit(doc, method=None):
 	# A production run is TWO Intacct documents and both keys matter — keeping only the
 	# first left the produce leg traceable in the request log and nowhere else. Joined,
 	# because anyone reconciling needs to find either document from the Stock Entry.
-	keys = result.get("intacct_keys") or [result.get("intacct_key")]
-	doc.db_set("custom_intacct_key", ", ".join(str(key) for key in keys if key))
+	keys = [key for key in (result.get("intacct_keys") or [result.get("intacct_key")]) if key]
+	if not keys:
+		# Nothing was posted — a movement with no Intacct document behind it must not
+		# carry a key or a posted date, or the cancel hook would later try to reverse a
+		# posting that never happened.
+		return
+
+	doc.db_set("custom_intacct_key", ", ".join(str(key) for key in keys))
 	doc.db_set("custom_intacct_posted_on", frappe.utils.now_datetime())
 
 
