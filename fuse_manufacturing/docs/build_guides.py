@@ -19,6 +19,7 @@ run will overwrite it.
 
 import os
 import re
+import shutil
 import sys
 
 import markdown
@@ -148,6 +149,24 @@ figure.shot .label {
 	color: var(--accent);
 }
 figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+/* A real screenshot, rather than the gap where one is going. Solid border instead of the
+   dashed one, and no inner padding — the picture is the content, not something sitting
+   inside a placeholder. */
+figure.shot--image {
+	padding: 0;
+	border: 1px solid var(--rule);
+	background: var(--ground);
+	overflow: hidden;
+}
+figure.shot--image img { display: block; width: 100%; height: auto; }
+figure.shot--image figcaption {
+	padding: .5rem .8rem;
+	border-top: 1px solid var(--rule);
+	background: var(--panel);
+	color: var(--faint);
+	font-size: .85rem;
+	text-align: left;
+}
 footer.guide {
 	max-width: 46rem;
 	margin: 3rem auto 0;
@@ -197,9 +216,74 @@ def placeholder(match):
 	)
 
 
+# A lone image in its own paragraph. Anything inline stays inline.
+IMAGE = re.compile(r'<p><img([^>]*?)alt="([^"]*)"([^>]*?)></p>')
+
+
+def figure(match):
+	"""An image on its own becomes a figure, with its alt text as the caption.
+
+	Written as ordinary markdown — `![What it shows](images/receiving/01.png)` — so the
+	source still previews correctly in any editor, and the caption is the alt text rather
+	than a second thing to keep in step with it.
+	"""
+	before, alt, after = match.group(1), match.group(2), match.group(3)
+	# Put the tag back together around the alt the pattern had to split out to read it.
+	attrs = f'{before}alt="{alt}"{after}'
+	caption = f"<figcaption>{alt}</figcaption>" if alt.strip() else ""
+	return f'<figure class="shot shot--image"><img{attrs}>{caption}</figure>'
+
+
+def check_images(name, raw):
+	"""Warn about a referenced image that is not there.
+
+	A broken image in a guide is worse than the placeholder it replaced: the placeholder
+	says a picture is coming, and a broken one says the document is broken.
+	"""
+	missing = []
+	for src in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", raw):
+		if src.startswith(("http://", "https://", "/")):
+			continue
+		if not os.path.exists(os.path.join(SOURCE, src.replace("/", os.sep))):
+			missing.append(src)
+	for src in missing:
+		print(f"  ! {name}: image not found - {src}")
+	return missing
+
+
+def copy_images():
+	"""Mirror docs/training/images into the served folder.
+
+	The guides are written against `images/...` relative paths so they preview correctly
+	while being edited. Serving them means the same tree has to exist next to the HTML, and
+	copying is the whole of it — no rewriting of paths, and the same markdown works in both
+	places.
+	"""
+	source = os.path.join(SOURCE, "images")
+	if not os.path.isdir(source):
+		return 0
+
+	target = os.path.join(TARGET, "images")
+	copied = 0
+	for folder, _, files in os.walk(source):
+		out = os.path.join(target, os.path.relpath(folder, source))
+		os.makedirs(out, exist_ok=True)
+		for name in files:
+			src = os.path.join(folder, name)
+			dst = os.path.join(out, name)
+			# Only when it has actually changed. A guide build should be cheap enough to
+			# run on every edit without shuffling twenty megabytes of screenshots.
+			if os.path.exists(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
+				continue
+			shutil.copy2(src, dst)
+			copied += 1
+	return copied
+
+
 def build_one(path):
 	"""Render one markdown guide. Returns (number, title, filename)."""
 	raw = open(path, encoding="utf-8").read()
+	check_images(os.path.basename(path), raw)
 
 	# The first heading is the title and the first italic line under it is the standfirst.
 	# Both are lifted into the page header, so they are stripped from the body to avoid
@@ -217,6 +301,8 @@ def build_one(path):
 
 	body = markdown.markdown(raw, extensions=["tables", "sane_lists"])
 	body = PLACEHOLDER.sub(placeholder, body)
+	# An image in a paragraph of its own is a screenshot, not an inline illustration.
+	body = IMAGE.sub(figure, body)
 	# Wide tables scroll inside their own box; the page itself must never scroll sideways.
 	body = body.replace("<table>", '<div class="table-scroll"><table>').replace(
 		"</table>", "</table></div>"
@@ -234,6 +320,7 @@ def build_one(path):
 
 def main():
 	os.makedirs(TARGET, exist_ok=True)
+	images = copy_images()
 	built = []
 	for name in sorted(os.listdir(SOURCE)):
 		if name.lower().endswith(".md"):
@@ -241,7 +328,7 @@ def main():
 
 	for name, title in built:
 		print(f"{name}.html  <-  {title}")
-	print(f"\n{len(built)} guide(s) into {TARGET}")
+	print(f"\n{len(built)} guide(s) and {images} image(s) into {TARGET}")
 
 
 if __name__ == "__main__":

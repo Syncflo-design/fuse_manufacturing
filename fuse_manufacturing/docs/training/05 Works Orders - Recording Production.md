@@ -35,8 +35,7 @@ Fuse works out the component quantities from the recipe and the amount you are m
    quantity ordered and the order number.
 3. Click the row you are recording against.
 
-> **Screenshot 1 — The works orders list**
-> *[to be inserted: the Work Order list filtered to open orders]*
+![The works orders list, filtered to open orders](images/wo/run-01.png)
 
 Status **Not Started** means the order has been raised but no material has been issued to
 it yet. **In Process** means it is open and can be produced against. A completed order
@@ -54,8 +53,7 @@ the job.
 3. Leave it at the full order quantity unless you are only starting part of it.
 4. Click **Create**.
 
-> **Screenshot 2 — Start, and the Select Quantity box**
-> *[to be inserted: MFG-WO-2026-00004 with the Select Quantity dialog open]*
+![Start, and the Select Quantity box](images/wo/run-02.png)
 
 ### Step 2 — The material entry
 
@@ -65,8 +63,7 @@ Click **Save**, read the rows, then **Submit**.
 The works order now shows **Material Transferred for Manufacturing**, and the status turns
 to **In Process**.
 
-> **Screenshot 3 — The material entry, submitted**
-> *[to be inserted: MAT-STE-2026-00022, submitted, showing the component rows]*
+![The material entry, submitted, with its component rows](images/wo/run-03.png)
 
 > **Why nothing appears in Intacct at this step**
 > Here, components are made in the same warehouse they are stored in — the source, the
@@ -92,8 +89,7 @@ Do this when the batch is finished and you know how much you actually made.
 
 Leave *Consider Process Loss* alone unless your supervisor has told you otherwise.
 
-> **Screenshot 4 — The Select Quantity box, for the quantity made**
-> *[to be inserted: the Select Quantity dialog]*
+![The Select Quantity box, for the quantity made](images/wo/run-04.png)
 
 ### Step 2 — The Manufacture entry
 
@@ -106,8 +102,7 @@ components coming out.
 
 It is a **draft**. Nothing has moved yet, in Fuse or in Intacct.
 
-> **Screenshot 5 — The Manufacture entry, linked back to the works order**
-> *[to be inserted: the Stock Entry with its component rows]*
+![The Manufacture entry, linked back to the works order](images/wo/run-05.png)
 
 ## Step 3 — Changing the recipe for this run
 
@@ -192,8 +187,7 @@ Both keys and the time they were sent are held against the entry, so either Inta
 document can be found from here. If the section is empty, the movement did not reach
 Intacct — tell your administrator.
 
-> **Screenshot 6 — The Intacct section on the submitted entry**
-> *[to be inserted: MAT-STE-2026-00023 with the Intacct panel expanded, showing both keys]*
+![The Intacct section on the submitted entry, showing both keys](images/wo/run-06.png)
 
 ## Un-manufacturing
 
@@ -223,14 +217,19 @@ optional and it changes nothing.
 
 1. On Fuse Home, click **Stock Control**, then **Stock Entry**, and add a new one.
 2. Set **Stock Entry Type** to **Disassemble**.
-3. Tick **From BOM** and choose the **BOM** of the item you are breaking up.
-4. Enter the **Finished Good Quantity** — how many you are taking apart.
-5. Click **Get Items**. The item to be broken up is listed going out, and the components
-   from the recipe are listed coming back in.
-6. Set the warehouses: where the item is coming from, and where the components are going.
+3. Open **BOM Info** and tick **From BOM**.
+4. Under **Default Warehouse**, set the **Default Target Warehouse** — where the
+   components are going. Every component row picks it up.
+5. Choose the **BOM** of the item you are breaking up, and enter the **Finished Good
+   Quantity** — how many you are taking apart.
+6. Click **Get Items**. The components are listed coming in, and the **last row** is the
+   item itself, going out.
+7. On that last row, set the **Source Warehouse** — where the item is being taken from.
+   It is the one warehouse the screen does not fill in for you, and the entry cannot be
+   submitted without it.
+8. Click **Update Rate and Availability**. Until you do, every rate reads R 0.00.
 
-> **Screenshot 7 — A Disassemble entry built from the BOM**
-> *[to be inserted: the Disassemble stock entry, From BOM ticked, rows filled in]*
+![A Disassemble entry built from the BOM](images/wo/run-07.png)
 
 ### Correcting what actually came back
 
@@ -271,8 +270,7 @@ from, and that is the point: un-manufacturing does not need one.
 > component's real valuation with nothing. If a row has no rate, Fuse refuses the whole
 > entry and names the row rather than posting a destructive number.
 
-> **Screenshot 8 — The submitted entry with its two Intacct keys**
-> *[to be inserted: the Intacct panel on the submitted Disassemble entry]*
+![The submitted entry with its two Intacct keys](images/wo/run-08.png)
 
 ### Undoing an un-manufacture
 

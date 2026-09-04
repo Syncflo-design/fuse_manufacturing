@@ -30,8 +30,7 @@ rather than looking for a way to add it here.
 - Know how much actually arrived, not how much was ordered.
 - Know whether anything arrived damaged, and how much.
 
-> **Screenshot 1 — Fuse Home with the Receiving tile**
-> *[to be inserted: Fuse Home, Quick Launch row, Receiving tile first]*
+![Fuse Home, with Receiving first in the Quick Launch row](images/01.png)
 
 ## Finding the order
 

@@ -108,6 +108,24 @@ figure.shot .label {
 	color: var(--accent);
 }
 figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+/* A real screenshot, rather than the gap where one is going. Solid border instead of the
+   dashed one, and no inner padding — the picture is the content, not something sitting
+   inside a placeholder. */
+figure.shot--image {
+	padding: 0;
+	border: 1px solid var(--rule);
+	background: var(--ground);
+	overflow: hidden;
+}
+figure.shot--image img { display: block; width: 100%; height: auto; }
+figure.shot--image figcaption {
+	padding: .5rem .8rem;
+	border-top: 1px solid var(--rule);
+	background: var(--panel);
+	color: var(--faint);
+	font-size: .85rem;
+	text-align: left;
+}
 footer.guide {
 	max-width: 46rem;
 	margin: 3rem auto 0;
@@ -151,7 +169,7 @@ rather than looking for a way to add it here.</p>
 <li>Know how much actually arrived, not how much was ordered.</li>
 <li>Know whether anything arrived damaged, and how much.</li>
 </ul>
-<figure class="shot"><span class="label">Screenshot 1</span><span class="what">Fuse Home, Quick Launch row, Receiving tile first</span></figure>
+<figure class="shot shot--image"><img alt="Fuse Home, with Receiving first in the Quick Launch row" src="images/01.png" /><figcaption>Fuse Home, with Receiving first in the Quick Launch row</figcaption></figure>
 <h2>Finding the order</h2>
 <ol>
 <li>On Fuse Home, click <strong>Receiving</strong>.</li>
