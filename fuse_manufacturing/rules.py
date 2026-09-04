@@ -490,6 +490,56 @@ def classify_manufacture_rows(rows):
 	return {"consumed": consumed, "produced": produced, "problems": problems}
 
 
+def classify_disassemble_rows(rows):
+	"""Split a Disassemble entry into the item taken apart and the components returned.
+
+	The mirror of `classify_manufacture_rows`, and deliberately NOT keyed on
+	`is_finished_item`: taking something apart is not a production run and nothing sets
+	that flag on one. Direction is the only reliable signal — exactly one row leaves
+	stock, and the rest arrive.
+
+	Returns {"taken": row or None, "returned": [...], "problems": [...]}. Problems are
+	sentences for a human; a caller with any of them must refuse to post.
+	"""
+	taken, returned, problems = None, [], []
+
+	for row in rows:
+		source, target = row.get("s_warehouse"), row.get("t_warehouse")
+
+		if source and target:
+			problems.append(
+				f"{row.get('item_code')} has both a source and a destination warehouse, so "
+				"it is a move rather than a disassembly. Take it apart on its own entry."
+			)
+		elif source:
+			if taken is not None:
+				problems.append(
+					f"This entry takes apart more than one item ({taken.get('item_code')}, "
+					f"{row.get('item_code')}). Fuse has one cost to break up, not two, so it "
+					"will not post it. Take them apart on separate entries."
+				)
+			else:
+				taken = row
+		elif target:
+			returned.append(row)
+		else:
+			problems.append(
+				f"{row.get('item_code')} has neither a source nor a destination warehouse. "
+				"Fuse cannot tell which way it moved."
+			)
+
+	if not problems:
+		if taken is None:
+			problems.append("This entry takes nothing apart — no row leaves stock.")
+		elif not returned:
+			problems.append(
+				f"{taken.get('item_code')} is taken apart but nothing comes back. A "
+				"disassembly has to return the components it breaks into."
+			)
+
+	return {"taken": taken, "returned": returned, "problems": problems}
+
+
 def manufacture_reversal_legs(consumed, produced_item, produced_qty, produced_uom, warehouse):
 	"""The two legs that undo a production run.
 

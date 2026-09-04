@@ -108,6 +108,24 @@ figure.shot .label {
 	color: var(--accent);
 }
 figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+/* A real screenshot, rather than the gap where one is going. Solid border instead of the
+   dashed one, and no inner padding — the picture is the content, not something sitting
+   inside a placeholder. */
+figure.shot--image {
+	padding: 0;
+	border: 1px solid var(--rule);
+	background: var(--ground);
+	overflow: hidden;
+}
+figure.shot--image img { display: block; width: 100%; height: auto; }
+figure.shot--image figcaption {
+	padding: .5rem .8rem;
+	border-top: 1px solid var(--rule);
+	background: var(--panel);
+	color: var(--faint);
+	font-size: .85rem;
+	text-align: left;
+}
 footer.guide {
 	max-width: 46rem;
 	margin: 3rem auto 0;
@@ -159,8 +177,35 @@ never type a recipe in Fuse and you cannot change one here.</p>
 <li>Click the row you are recording against.</li>
 </ol>
 <figure class="shot"><span class="label">Screenshot 1</span><span class="what">the Work Order list filtered to open orders</span></figure>
-<p>Status <strong>In Process</strong> means the order is open and can be produced against. A completed
-order drops off the default list.</p>
+<p>Status <strong>Not Started</strong> means the order has been raised but no material has been issued to
+it yet. <strong>In Process</strong> means it is open and can be produced against. A completed order
+drops off the default list.</p>
+<h2>Starting the order — issuing the material</h2>
+<p>Do this when the batch is about to run. It records that the components have been given to
+the job.</p>
+<h3>Step 1 — Start</h3>
+<ol>
+<li>With the works order open, click <strong>Start</strong> at the top right.</li>
+<li>A <strong>Select Quantity</strong> box appears, asking the quantity for material transfer.</li>
+<li>Leave it at the full order quantity unless you are only starting part of it.</li>
+<li>Click <strong>Create</strong>.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 2</span><span class="what">MFG-WO-2026-00004 with the Select Quantity dialog open</span></figure>
+<h3>Step 2 — The material entry</h3>
+<p>A <strong>Material Transfer for Manufacture</strong> entry opens, already filled in from the recipe.
+Click <strong>Save</strong>, read the rows, then <strong>Submit</strong>.</p>
+<p>The works order now shows <strong>Material Transferred for Manufacturing</strong>, and the status turns
+to <strong>In Process</strong>.</p>
+<figure class="shot"><span class="label">Screenshot 3</span><span class="what">MAT-STE-2026-00022, submitted, showing the component rows]</em></p>
+<p><strong>Why nothing appears in Intacct at this step</strong>
+Here, components are made in the same warehouse they are stored in — the source, the
+work-in-progress and the target warehouse on the works order are all the same place. So
+nothing has actually moved, and there is nothing for Intacct to record. The entry is a
+Fuse record that the material is now committed to the job. Intacct hears about the
+production run itself, at the next step.</p>
+<p>On a site that issues components to a separate work-in-progress warehouse, this step
+<strong>is</strong> a real movement and does reach Intacct as a transfer.</p>
+</blockquote>
 <h2>Recording production</h2>
 <p>Do this when the batch is finished and you know how much you actually made.</p>
 <h3>Step 1 — Finish</h3>
@@ -172,7 +217,9 @@ order drops off the default list.</p>
 <li>Click <strong>Create</strong>.</li>
 </ol>
 <p>Leave <em>Consider Process Loss</em> alone unless your supervisor has told you otherwise.</p>
-<figure class="shot"><span class="label">Screenshot 2</span><span class="what">the Select Quantity dialog</span></figure>
+<blockquote>
+<p><strong>Screenshot 4 — The Select Quantity box, for the quantity made</strong>
+<em>[ the Select Quantity dialog</span></figure>
 <h3>Step 2 — The Manufacture entry</h3>
 <p>A <strong>Manufacture entry</strong> opens, already filled in. This document did not exist until you
 clicked Finish — it is created by it. The works order number is carried across, and every
@@ -180,7 +227,7 @@ component from the recipe has been worked out for the quantity you entered.</p>
 <p>The last row in the list is the finished goods going in. The rows above it are the
 components coming out.</p>
 <p>It is a <strong>draft</strong>. Nothing has moved yet, in Fuse or in Intacct.</p>
-<figure class="shot"><span class="label">Screenshot 3</span><span class="what">the Stock Entry with its component rows</span></figure>
+<figure class="shot"><span class="label">Screenshot 5</span><span class="what">the Stock Entry with its component rows</span></figure>
 <h2>Step 3 — Changing the recipe for this run</h2>
 <p>This is the part that matters, and the part a new operator most often rushes. What Fuse
 has filled in is what the recipe <strong>says</strong> should have been used. What you record should be
@@ -234,6 +281,88 @@ no need to wait until an order is complete.</p>
    down.</li>
 <li>Open the works order again — <strong>Manufactured Qty</strong> should now show what you recorded.</li>
 </ol>
+<h3>Checking it reached Intacct</h3>
+<p>Open the submitted Manufacture entry and expand the <strong>Intacct</strong> section. It shows two
+keys, because a production run makes two documents in Intacct:</p>
+<ul>
+<li>a <strong>Manufacturing Backflush Decr</strong> — the components coming out</li>
+<li>a <strong>Manufacturing Run Increase</strong> — the finished goods going in, carrying the cost</li>
+</ul>
+<p>Both keys and the time they were sent are held against the entry, so either Intacct
+document can be found from here. If the section is empty, the movement did not reach
+Intacct — tell your administrator.</p>
+<figure class="shot"><span class="label">Screenshot 6</span><span class="what">MAT-STE-2026-00023 with the Intacct panel expanded, showing both keys</span></figure>
+<h2>Un-manufacturing</h2>
+<p>Un-manufacturing takes a finished item off the shelf and breaks it back into the
+components it is made of. The item goes out of stock, and the components come back in.</p>
+<p>It is a <strong>transaction in its own right</strong>, not the undo of anything. The item might have
+been made last week or last year, by a works order nobody can find, or before Fuse
+existed. None of that matters and none of it is asked for.</p>
+<blockquote>
+<p><strong>Not the same as cancelling a run</strong>
+Cancelling a Manufacture entry undoes one specific production run and puts the works
+order back where it was. Un-manufacturing is a fresh transaction against stock on hand.
+If you are correcting a run you have just recorded, cancel it — see <em>Cancel, never
+delete</em>. If you are breaking up stock, un-manufacture it.</p>
+</blockquote>
+<h3>Where the components come from</h3>
+<p>From the <strong>BOM</strong> — the same recipe the item is made by. You choose the item's BOM and the
+quantity being broken up, and Fuse works out the components and quantities from it, the
+same way it works them out for a production run.</p>
+<p>If you happen to know which works order the item came from you can record it, but it is
+optional and it changes nothing.</p>
+<h3>What you are doing</h3>
+<ol>
+<li>On Fuse Home, click <strong>Stock Control</strong>, then <strong>Stock Entry</strong>, and add a new one.</li>
+<li>Set <strong>Stock Entry Type</strong> to <strong>Disassemble</strong>.</li>
+<li>Tick <strong>From BOM</strong> and choose the <strong>BOM</strong> of the item you are breaking up.</li>
+<li>Enter the <strong>Finished Good Quantity</strong> — how many you are taking apart.</li>
+<li>Click <strong>Get Items</strong>. The item to be broken up is listed going out, and the components
+   from the recipe are listed coming back in.</li>
+<li>Set the warehouses: where the item is coming from, and where the components are going.</li>
+</ol>
+<figure class="shot"><span class="label">Screenshot 7</span><span class="what">the Disassemble stock entry, From BOM ticked, rows filled in</span></figure>
+<h3>Correcting what actually came back</h3>
+<p>What the BOM says the item contains and what you actually recover are not always the
+same — something may be damaged, contaminated, or not worth keeping.</p>
+<p>Change it the same way you would on a production run, and it applies to this entry only:</p>
+<ul>
+<li><strong>Change a quantity</strong> if less came back than the recipe says.</li>
+<li><strong>Remove a row</strong> — set it to zero or delete it — if a component was not recovered at all.</li>
+<li><strong>Add a row</strong> if something came out that the recipe does not list.</li>
+</ul>
+<p>The master BOM is untouched.</p>
+<h3>Save and submit</h3>
+<ol>
+<li>Click <strong>Save</strong>. It is a draft; nothing has moved.</li>
+<li>Read the rows once more.</li>
+<li>Click <strong>Submit</strong>, and confirm.</li>
+</ol>
+<p>Both halves reach Intacct as one operation, so a half-broken-up item is not possible.</p>
+<h3>What reaches Intacct</h3>
+<p>Two documents, the same pair a cancelled production run uses, because Intacct models it
+the same way:</p>
+<ul>
+<li><strong>Manufacturing Run Decrease</strong> — the item leaves stock. No cost is sent; Intacct values
+  what leaves at its own costing.</li>
+<li><strong>Manufacturing Backflush Incr</strong> — the components come back in, <strong>carrying a cost</strong>.</li>
+</ul>
+<p>The cost on that second leg is ERPNext's rate for each component on the entry — the item's
+own value broken back across the parts it yielded. There is no original run to read a cost
+from, and that is the point: un-manufacturing does not need one.</p>
+<blockquote>
+<p><strong>Why a zero cost is refused</strong>
+The components-in definition updates cost in Intacct. Sending zero would overwrite the
+component's real valuation with nothing. If a row has no rate, Fuse refuses the whole
+entry and names the row rather than posting a destructive number.</p>
+<p><strong>Screenshot 8 — The submitted entry with its two Intacct keys</strong>
+<em>[to be inserted: the Intacct panel on the submitted Disassemble entry]</em></p>
+</blockquote>
+<h3>Undoing an un-manufacture</h3>
+<p>Cancel the Disassemble entry. The components go back out and the item comes back in, at
+the cost of the components — which is a production run, and posts through the ordinary
+manufacturing pair.</p>
+<p>As everywhere else in Fuse: cancel, never delete, and never key an opposite entry by hand.</p>
 <h2>If something goes wrong</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -282,9 +411,8 @@ where they were.</p>
 <p>Do not delete, and do not try to correct a mistake by entering a second, opposite
 movement. Deleting would remove the record here while Intacct still holds the movement,
 and an opposite entry leaves two wrong movements in the history instead of none.</p>
-<p>Cancelling a production run reverses both halves in Intacct: the finished goods come back
-out, and the components go back in at the cost they left at. The works order returns to
-the position it was in before.</p>
+<p>Cancelling a production run reverses both halves in Intacct. That is un-manufacturing, and
+it has its own section above.</p>
 <h2>Jobs that belong in Intacct</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -309,8 +437,8 @@ the position it was in before.</p>
 </tbody>
 </table></div>
 <h2>Quick reference</h2>
-<p>Fuse Home → Works Orders → open the order → Finish → quantity → Create → correct the
-components → Save → Submit.</p>
+<p>Fuse Home → Works Orders → open the order → <strong>Start</strong> → quantity → Create → Save → Submit
+→ <strong>Finish</strong> → quantity → Create → correct the components → Save → Submit.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -356,8 +484,20 @@ components → Save → Submit.</p>
 <td>No. One each.</td>
 </tr>
 <tr>
-<td>How do I undo it?</td>
+<td>How do I undo a run I just recorded?</td>
 <td>Cancel the Manufacture entry. Both halves are reversed.</td>
+</tr>
+<tr>
+<td>How do I break up stock made long ago?</td>
+<td>Un-manufacture it — a Disassemble entry built from the BOM.</td>
+</tr>
+<tr>
+<td>Do I need the works order it came from?</td>
+<td>No. Record it if you know it; it changes nothing.</td>
+</tr>
+<tr>
+<td>Where do the components come from?</td>
+<td>The item's BOM, for the quantity you are breaking up.</td>
 </tr>
 </tbody>
 </table></div>

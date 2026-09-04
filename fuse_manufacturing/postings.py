@@ -506,6 +506,183 @@ def _manufacture_rows(doc):
 	return consumed, produced
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Un-manufacturing — breaking a finished item back into its components
+# ──────────────────────────────────────────────────────────────────────────────
+
+# A transaction in its own right, not the undo of one. Stock is pulled off the shelf and
+# broken up; when it was made, or whether Fuse ever saw it made, does not come into it.
+#
+# It posts through the SAME pair as a cancelled production run, because Intacct models
+# both the same way — finished goods out at Intacct's own valuation, components back in
+# carrying a cost. The difference is only where that cost comes from. A cancel reads the
+# run it is undoing. This has no run to read, so it takes ERPNext's rates on the entry,
+# which is ERPNext breaking the item's own valuation across the components it yielded.
+#
+# A zero rate is still refused by rules.manufacture_reversal_legs — the increase leg
+# updates cost in Intacct, so a zero would overwrite the component's real valuation.
+
+
+def _disassemble_rows(doc):
+	"""The item taken apart and the components returned, as the postings want them."""
+	split = rules.classify_disassemble_rows(
+		[
+			{
+				"item_code": row.item_code,
+				"qty": row.qty,
+				"s_warehouse": row.s_warehouse,
+				"t_warehouse": row.t_warehouse,
+				"rate": row.valuation_rate or row.basic_rate or 0,
+			}
+			for row in doc.items
+		]
+	)
+	if split["problems"]:
+		frappe.throw(f"{doc.name} cannot be posted to Intacct:\n\n" + "\n\n".join(split["problems"]))
+
+	def unit_for(item_code):
+		return frappe.db.get_value("Item", item_code, "stock_uom")
+
+	taken = dict(split["taken"])
+	taken["uom"] = unit_for(taken["item_code"])
+	taken["warehouse"] = taken["s_warehouse"]
+
+	returned = [
+		{
+			"item_code": row["item_code"],
+			"qty": row["qty"],
+			"uom": unit_for(row["item_code"]),
+			"warehouse": _intacct_warehouse(row["t_warehouse"]),
+			"rate": row["rate"],
+			"bin": _default_bin(row["t_warehouse"], row["item_code"]),
+		}
+		for row in split["returned"]
+	]
+	return taken, returned
+
+
+@frappe.whitelist()
+def post_stock_entry_disassemble(stock_entry, dry_run=False):
+	"""Post an ERPNext Disassemble entry to Intacct: item out, components back in.
+
+	Two documents in ONE atomic operation, for the same reason a production run is — a
+	half-posted disassembly is an item that has left stock and become nothing.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+
+	if not dry_run and doc.docstatus != 1:
+		frappe.throw(f"{stock_entry} is not submitted (docstatus {doc.docstatus}).")
+	if doc.purpose != "Disassemble":
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Disassemble.")
+
+	entity = gateway.entity_for_company(doc.company)
+	taken, returned = _disassemble_rows(doc)
+
+	legs = rules.manufacture_reversal_legs(
+		consumed=returned,
+		produced_item=taken["item_code"],
+		produced_qty=taken["qty"],
+		produced_uom=taken["uom"],
+		warehouse=_intacct_warehouse(taken["warehouse"]),
+	)
+	legs["unproduce"][0]["bin"] = _default_bin(taken["warehouse"], taken["item_code"])
+
+	# Same reason as a production reversal: neither definition has a numbering scheme
+	# attached, so Intacct rejects them with PL01000127 unless Fuse supplies the number.
+	out_fn = build_ictransaction_xml(
+		definition=mapped_definition(MANUFACTURING_UNPRODUCE),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "disassemble", 1),
+		lines=legs["unproduce"],
+		location_id=entity,
+	)
+	in_fn = build_ictransaction_xml(
+		definition=mapped_definition(MANUFACTURING_UNCONSUME),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		document_no=rules.document_number_for("Stock Entry", doc.name, "disassemble", 2),
+		lines=legs["unconsume"],
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"entity": entity,
+			"out_xml": ET.tostring(out_fn, encoding="unicode"),
+			"in_xml": ET.tostring(in_fn, encoding="unicode"),
+		}
+
+	# The item leaves BEFORE the components arrive, so the stock never appears twice.
+	keys = gateway.execute_many(
+		[out_fn, in_fn],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose="disassemble",
+		atomic=True,
+	)
+	return {"posted": True, "intacct_keys": keys}
+
+
+@frappe.whitelist()
+def reverse_stock_entry_disassemble(stock_entry, dry_run=False):
+	"""Undo a disassembly: the components go back out and the item comes back in.
+
+	Which is a production run — so it posts through the forward manufacturing pair, and
+	the item returns at the cost of the components that made it up again. Those two
+	definitions do carry numbering schemes, so no document number is supplied here.
+	"""
+	doc = frappe.get_doc("Stock Entry", stock_entry)
+	if doc.purpose != "Disassemble":
+		frappe.throw(f"{stock_entry} is a {doc.purpose}, not a Disassemble.")
+
+	entity = gateway.entity_for_company(doc.company)
+	taken, returned = _disassemble_rows(doc)
+
+	legs = rules.manufacture_legs(
+		consumed=returned,
+		produced_item=taken["item_code"],
+		produced_qty=taken["qty"],
+		produced_uom=taken["uom"],
+		warehouse=_intacct_warehouse(taken["warehouse"]),
+	)
+	legs["produce"][0]["bin"] = _default_bin(taken["warehouse"], taken["item_code"])
+
+	consume_fn = build_ictransaction_xml(
+		definition=mapped_definition(MANUFACTURING_CONSUME),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["consume"],
+		location_id=entity,
+	)
+	produce_fn = build_ictransaction_xml(
+		definition=mapped_definition(MANUFACTURING_PRODUCE),
+		posting_date=doc.posting_date,
+		reference_no=doc.name,
+		lines=legs["produce"],
+		location_id=entity,
+	)
+
+	if dry_run:
+		return {
+			"dry_run": True,
+			"reversal": True,
+			"entity": entity,
+			"consume_xml": ET.tostring(consume_fn, encoding="unicode"),
+			"produce_xml": ET.tostring(produce_fn, encoding="unicode"),
+		}
+
+	keys = gateway.execute_many(
+		[consume_fn, produce_fn],
+		company=doc.company,
+		reference=("Stock Entry", doc.name),
+		purpose="disassemble-reverse",
+		atomic=True,
+	)
+	return {"reversed": True, "intacct_keys": keys}
+
+
 @frappe.whitelist()
 def reverse_stock_entry_transfer(stock_entry, dry_run=False):
 	"""Undo a posted warehouse transfer by posting the same move back the other way.
@@ -640,6 +817,7 @@ def reverse_stock_entry_manufacture(stock_entry, dry_run=False):
 # Which Stock Entry purposes post, and how.
 POSTED_PURPOSES = {
 	"Manufacture": post_stock_entry_manufacture,
+	"Disassemble": post_stock_entry_disassemble,
 	**{purpose: post_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
 }
 
@@ -647,6 +825,7 @@ POSTED_PURPOSES = {
 # reversed is visible as a gap here rather than discovered at a cancel.
 REVERSED_PURPOSES = {
 	"Manufacture": reverse_stock_entry_manufacture,
+	"Disassemble": reverse_stock_entry_disassemble,
 	**{purpose: reverse_stock_entry_transfer for purpose in TRANSFER_PURPOSES},
 }
 

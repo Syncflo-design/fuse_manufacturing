@@ -38,8 +38,45 @@ Fuse works out the component quantities from the recipe and the amount you are m
 > **Screenshot 1 — The works orders list**
 > *[to be inserted: the Work Order list filtered to open orders]*
 
-Status **In Process** means the order is open and can be produced against. A completed
-order drops off the default list.
+Status **Not Started** means the order has been raised but no material has been issued to
+it yet. **In Process** means it is open and can be produced against. A completed order
+drops off the default list.
+
+## Starting the order — issuing the material
+
+Do this when the batch is about to run. It records that the components have been given to
+the job.
+
+### Step 1 — Start
+
+1. With the works order open, click **Start** at the top right.
+2. A **Select Quantity** box appears, asking the quantity for material transfer.
+3. Leave it at the full order quantity unless you are only starting part of it.
+4. Click **Create**.
+
+> **Screenshot 2 — Start, and the Select Quantity box**
+> *[to be inserted: MFG-WO-2026-00004 with the Select Quantity dialog open]*
+
+### Step 2 — The material entry
+
+A **Material Transfer for Manufacture** entry opens, already filled in from the recipe.
+Click **Save**, read the rows, then **Submit**.
+
+The works order now shows **Material Transferred for Manufacturing**, and the status turns
+to **In Process**.
+
+> **Screenshot 3 — The material entry, submitted**
+> *[to be inserted: MAT-STE-2026-00022, submitted, showing the component rows]*
+
+> **Why nothing appears in Intacct at this step**
+> Here, components are made in the same warehouse they are stored in — the source, the
+> work-in-progress and the target warehouse on the works order are all the same place. So
+> nothing has actually moved, and there is nothing for Intacct to record. The entry is a
+> Fuse record that the material is now committed to the job. Intacct hears about the
+> production run itself, at the next step.
+>
+> On a site that issues components to a separate work-in-progress warehouse, this step
+> **is** a real movement and does reach Intacct as a transfer.
 
 ## Recording production
 
@@ -55,7 +92,7 @@ Do this when the batch is finished and you know how much you actually made.
 
 Leave *Consider Process Loss* alone unless your supervisor has told you otherwise.
 
-> **Screenshot 2 — The Select Quantity box**
+> **Screenshot 4 — The Select Quantity box, for the quantity made**
 > *[to be inserted: the Select Quantity dialog]*
 
 ### Step 2 — The Manufacture entry
@@ -69,7 +106,7 @@ components coming out.
 
 It is a **draft**. Nothing has moved yet, in Fuse or in Intacct.
 
-> **Screenshot 3 — The Manufacture entry, linked back to the works order**
+> **Screenshot 5 — The Manufacture entry, linked back to the works order**
 > *[to be inserted: the Stock Entry with its component rows]*
 
 ## Step 3 — Changing the recipe for this run
@@ -143,6 +180,107 @@ no need to wait until an order is complete.
    down.
 4. Open the works order again — **Manufactured Qty** should now show what you recorded.
 
+### Checking it reached Intacct
+
+Open the submitted Manufacture entry and expand the **Intacct** section. It shows two
+keys, because a production run makes two documents in Intacct:
+
+- a **Manufacturing Backflush Decr** — the components coming out
+- a **Manufacturing Run Increase** — the finished goods going in, carrying the cost
+
+Both keys and the time they were sent are held against the entry, so either Intacct
+document can be found from here. If the section is empty, the movement did not reach
+Intacct — tell your administrator.
+
+> **Screenshot 6 — The Intacct section on the submitted entry**
+> *[to be inserted: MAT-STE-2026-00023 with the Intacct panel expanded, showing both keys]*
+
+## Un-manufacturing
+
+Un-manufacturing takes a finished item off the shelf and breaks it back into the
+components it is made of. The item goes out of stock, and the components come back in.
+
+It is a **transaction in its own right**, not the undo of anything. The item might have
+been made last week or last year, by a works order nobody can find, or before Fuse
+existed. None of that matters and none of it is asked for.
+
+> **Not the same as cancelling a run**
+> Cancelling a Manufacture entry undoes one specific production run and puts the works
+> order back where it was. Un-manufacturing is a fresh transaction against stock on hand.
+> If you are correcting a run you have just recorded, cancel it — see *Cancel, never
+> delete*. If you are breaking up stock, un-manufacture it.
+
+### Where the components come from
+
+From the **BOM** — the same recipe the item is made by. You choose the item's BOM and the
+quantity being broken up, and Fuse works out the components and quantities from it, the
+same way it works them out for a production run.
+
+If you happen to know which works order the item came from you can record it, but it is
+optional and it changes nothing.
+
+### What you are doing
+
+1. On Fuse Home, click **Stock Control**, then **Stock Entry**, and add a new one.
+2. Set **Stock Entry Type** to **Disassemble**.
+3. Tick **From BOM** and choose the **BOM** of the item you are breaking up.
+4. Enter the **Finished Good Quantity** — how many you are taking apart.
+5. Click **Get Items**. The item to be broken up is listed going out, and the components
+   from the recipe are listed coming back in.
+6. Set the warehouses: where the item is coming from, and where the components are going.
+
+> **Screenshot 7 — A Disassemble entry built from the BOM**
+> *[to be inserted: the Disassemble stock entry, From BOM ticked, rows filled in]*
+
+### Correcting what actually came back
+
+What the BOM says the item contains and what you actually recover are not always the
+same — something may be damaged, contaminated, or not worth keeping.
+
+Change it the same way you would on a production run, and it applies to this entry only:
+
+- **Change a quantity** if less came back than the recipe says.
+- **Remove a row** — set it to zero or delete it — if a component was not recovered at all.
+- **Add a row** if something came out that the recipe does not list.
+
+The master BOM is untouched.
+
+### Save and submit
+
+1. Click **Save**. It is a draft; nothing has moved.
+2. Read the rows once more.
+3. Click **Submit**, and confirm.
+
+Both halves reach Intacct as one operation, so a half-broken-up item is not possible.
+
+### What reaches Intacct
+
+Two documents, the same pair a cancelled production run uses, because Intacct models it
+the same way:
+
+- **Manufacturing Run Decrease** — the item leaves stock. No cost is sent; Intacct values
+  what leaves at its own costing.
+- **Manufacturing Backflush Incr** — the components come back in, **carrying a cost**.
+
+The cost on that second leg is ERPNext's rate for each component on the entry — the item's
+own value broken back across the parts it yielded. There is no original run to read a cost
+from, and that is the point: un-manufacturing does not need one.
+
+> **Why a zero cost is refused**
+> The components-in definition updates cost in Intacct. Sending zero would overwrite the
+> component's real valuation with nothing. If a row has no rate, Fuse refuses the whole
+> entry and names the row rather than posting a destructive number.
+
+> **Screenshot 8 — The submitted entry with its two Intacct keys**
+> *[to be inserted: the Intacct panel on the submitted Disassemble entry]*
+
+### Undoing an un-manufacture
+
+Cancel the Disassemble entry. The components go back out and the item comes back in, at
+the cost of the components — which is a production run, and posts through the ordinary
+manufacturing pair.
+
+As everywhere else in Fuse: cancel, never delete, and never key an opposite entry by hand.
 ## If something goes wrong
 
 | What you see | What it means and what to do |
@@ -174,9 +312,8 @@ Do not delete, and do not try to correct a mistake by entering a second, opposit
 movement. Deleting would remove the record here while Intacct still holds the movement,
 and an opposite entry leaves two wrong movements in the history instead of none.
 
-Cancelling a production run reverses both halves in Intacct: the finished goods come back
-out, and the components go back in at the cost they left at. The works order returns to
-the position it was in before.
+Cancelling a production run reverses both halves in Intacct. That is un-manufacturing, and
+it has its own section above.
 
 ## Jobs that belong in Intacct
 
@@ -188,8 +325,8 @@ the position it was in before.
 
 ## Quick reference
 
-Fuse Home → Works Orders → open the order → Finish → quantity → Create → correct the
-components → Save → Submit.
+Fuse Home → Works Orders → open the order → **Start** → quantity → Create → Save → Submit
+→ **Finish** → quantity → Create → correct the components → Save → Submit.
 
 | Question | Answer |
 |---|---|
@@ -202,7 +339,10 @@ components → Save → Submit.
 | Do I work out the quantities? | No. Fuse takes them from the recipe. You correct them. |
 | Do I enter a cost? | No. It is worked out from the components consumed. |
 | Two finished items on one entry? | No. One each. |
-| How do I undo it? | Cancel the Manufacture entry. Both halves are reversed. |
+| How do I undo a run I just recorded? | Cancel the Manufacture entry. Both halves are reversed. |
+| How do I break up stock made long ago? | Un-manufacture it — a Disassemble entry built from the BOM. |
+| Do I need the works order it came from? | No. Record it if you know it; it changes nothing. |
+| Where do the components come from? | The item's BOM, for the quantity you are breaking up. |
 
 > **Where this goes.** Fuse and Sage Intacct hold the same stock. Anything you submit here
 > is sent to Intacct immediately, and Fuse only records it once Intacct has accepted it. If
