@@ -322,6 +322,21 @@ CUSTOM_FIELDS = {
 			"allow_on_submit": 1,
 			"description": "DOCID of the Intacct sales order this mirrors. These orders are read-only — they exist so the warehouse can pick against a real order and so committed stock reaches demand reporting. Orders are raised in Intacct.",
 		},
+		{
+			# The one thing a planner may change on a mirrored order: whether it counts.
+			# Toggled from the Outstanding Orders report; read by Item Demand. On the
+			# order itself rather than in a report filter so it holds between runs and
+			# between people, and survives the hourly sync, which never rewrites an
+			# order once it exists.
+			"fieldname": "custom_exclude_from_planning",
+			"fieldtype": "Check",
+			"label": "Exclude from Planning",
+			"insert_after": "custom_intacct_so_id",
+			"allow_on_submit": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Leave this order out of Item Demand and the reorder figures. The order itself is unchanged.",
+		},
 	],
 	"Sales Order Item": [
 		{
@@ -581,6 +596,8 @@ ROLE_REPORTS = (
 	# Ours. Carries its own roles in the report definition, but granting here too means a
 	# site that had the role before the report arrived still ends up with access.
 	"Stock on Order",
+	# Planning: the order book and what it means for the shelf.
+	"Outstanding Orders", "Item Demand",
 )
 
 

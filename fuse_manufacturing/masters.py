@@ -798,9 +798,14 @@ def sync_sales_orders(company=None):
 	target = frappe.defaults.get_user_default("Company") or _target_companies(company)[0]
 
 	orders, problems = {}, []
+	# Every order Intacct still reports something outstanding on, BEFORE the line-level
+	# filters below. An order whose lines are all services, or all on a warehouse this
+	# site does not know, is still open in Intacct and must not be closed here for it.
+	still_open = set()
 	for row in rows:
 		if val(row, "DOCPARID") not in templates:
 			continue
+		still_open.add(val(row, "DOCHDRID"))
 
 		item_code = val(row, "ITEMID")
 		warehouse_id = val(row, "WAREHOUSE.LOCATION_NO")
@@ -892,6 +897,25 @@ def sync_sales_orders(company=None):
 		doc.insert(ignore_permissions=True)
 		doc.submit()
 		created += 1
+
+	# Orders mirrored earlier that Intacct no longer reports as outstanding have been
+	# shipped there. Closed, not cancelled — the same rule as purchase orders: the order
+	# did happen, and closing is what takes it out of committed stock and out of demand.
+	# Until 2026-09-07 nothing did this, so every order ever mirrored stayed open and the
+	# demand figures counted deliveries Intacct had already made.
+	for name, doc_id in frappe.get_all(
+		"Sales Order",
+		filters={
+			"custom_intacct_so_id": ("is", "set"),
+			"docstatus": 1,
+			"status": ("not in", ("Closed", "Completed")),
+		},
+		fields=["name", "custom_intacct_so_id"],
+		as_list=True,
+	):
+		if doc_id not in still_open:
+			frappe.get_doc("Sales Order", name).update_status("Closed")
+			closed += 1
 
 	return {
 		"open_orders": len(orders),
