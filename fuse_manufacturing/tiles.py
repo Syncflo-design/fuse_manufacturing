@@ -41,6 +41,25 @@ def get_tiles():
 
 	tiles.append(
 		{
+			# The planner's way in: the order book first, Item Demand a button away from
+			# it. Switched with Production Plan rather than on its own — the reports are
+			# the front half of that job, and a site that has turned planning off has no
+			# use for a demand list either.
+			"key": "planning",
+			"module": "production_plan",
+			"label": "Planning",
+			"blurb": "Open orders, and what to make and buy for them",
+			"icon": "📈",
+			"route": ["query-report", "Outstanding Orders"],
+			"roles": [
+				"Stock Controller", "Stock Manager", "Manufacturing User", "Manufacturing Manager",
+				"Purchase User", "Purchase Manager", "Sales Manager",
+			],
+		}
+	)
+
+	tiles.append(
+		{
 			# Sits next to Warehouse Transfer, and reads as its smaller sibling: same idea,
 			# one warehouse. Switched off by default — see the bin_transfer module.
 			"key": "bin_transfer",
