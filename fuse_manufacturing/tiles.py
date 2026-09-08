@@ -42,11 +42,9 @@ def get_tiles():
 	tiles.append(
 		{
 			# The planner's way in: the order book first, Item Demand a button away from
-			# it. Switched with Production Plan rather than on its own — the reports are
-			# the front half of that job, and a site that has turned planning off has no
-			# use for a demand list either.
+			# it. Its own module switch (see modules.py) — it was briefly tied to
+			# Production Plan, which Leader Rubber has off, and vanished with it.
 			"key": "planning",
-			"module": "production_plan",
 			"label": "Planning",
 			"blurb": "Open orders, and what to make and buy for them",
 			"icon": "📈",

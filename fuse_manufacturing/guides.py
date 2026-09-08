@@ -44,6 +44,7 @@ GUIDES = [
 	{"title": "Material Request", "file": "training/15 Material Request.html"},
 	{"title": "BOMs", "file": "training/16 BOMs.html"},
 	{"title": "Production Plan", "file": "training/17 Production Plan.html"},
+	{"title": "Planning", "file": "training/18 Planning.html"},
 ]
 
 

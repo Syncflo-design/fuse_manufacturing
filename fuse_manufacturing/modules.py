@@ -48,6 +48,14 @@ MODULES = [
 		"description": "Explode demand through the BOMs and raise the works orders and material requests it calls for.",
 	},
 	{
+		# Its own switch, not Production Plan's. Leader Rubber runs with Production Plan
+		# off and still needs the demand reports — tying the two together hid the Planning
+		# tile on the one site it was built for.
+		"key": "planning",
+		"label": "Planning",
+		"description": "The customer order book by item, and what has to be made and bought to cover it: Outstanding Orders and Item Demand.",
+	},
+	{
 		"key": "works_orders",
 		"label": "Works Orders",
 		"description": "Record production against a works order.",
