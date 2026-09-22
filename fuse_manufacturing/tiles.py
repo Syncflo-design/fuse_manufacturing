@@ -81,7 +81,8 @@ def get_tiles():
 			# On the reference row beside BOMs: a count happens a few times a year, and the
 			# main row is for what people do every day.
 			"group": "reference",
-			"roles": TRANSFER_ROLES,
+			# No roles named: whoever may read Fuse Count Import sees the tile, so a site
+			# widens or narrows it in Role Permissions without a code change.
 		}
 	)
 
