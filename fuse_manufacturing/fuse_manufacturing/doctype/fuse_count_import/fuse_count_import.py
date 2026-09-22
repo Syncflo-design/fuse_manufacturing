@@ -8,8 +8,8 @@ The lines table is rebuilt from the sheet on every save, never edited by hand. T
 the record of what the counters wrote down, and a figure typed into Fuse afterwards would be
 one nobody counted.
 
-There is no cancel. Once a figure is in Intacct, cancelling this record would not take it
-back out, and a cancelled record over a count Intacct still holds is worse than no record.
+There is no cancel once anything has been sent. A figure in Intacct is not taken back out by
+cancelling this record, and a cancelled record over a count Intacct still holds is worse than no record.
 The correction is a new sheet: every value is absolute, so loading the right figure
 overwrites the wrong one.
 
@@ -41,6 +41,9 @@ class FuseCountImport(Document):
 		self.db_set("sent_on", now_datetime())
 
 	def before_cancel(self):
+		# Nothing reached Intacct, so there is nothing to take back and the record may go.
+		if not self.sent_on:
+			return
 		frappe.throw(
 			"Counts already sent to Intacct cannot be taken back from here. To correct a line, "
 			"load a sheet with the right figure on it: it overwrites the one in Intacct.",
