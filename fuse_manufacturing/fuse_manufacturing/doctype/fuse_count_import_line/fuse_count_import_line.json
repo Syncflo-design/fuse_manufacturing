@@ -1,0 +1,129 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-22 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "sheet_row",
+  "item_id",
+  "item_name",
+  "bin",
+  "unit",
+  "qty_on_hand",
+  "qty_counted",
+  "counted",
+  "variance",
+  "qty_damaged",
+  "damaged_entered",
+  "intacct_line"
+ ],
+ "fields": [
+  {
+   "fieldname": "sheet_row",
+   "fieldtype": "Int",
+   "label": "Sheet row",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "item_id",
+   "fieldtype": "Data",
+   "label": "Item ID",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item name",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "bin",
+   "fieldtype": "Data",
+   "label": "Bin",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "qty_on_hand",
+   "fieldtype": "Float",
+   "label": "Qty on hand",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Intacct's quantity when the sheet was loaded. Blank on a blind count."
+  },
+  {
+   "fieldname": "qty_counted",
+   "fieldtype": "Float",
+   "label": "Qty counted",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "counted",
+   "fieldtype": "Check",
+   "label": "Counted on this sheet",
+   "read_only": 1,
+   "description": "Blank on the sheet means not counted this time, and nothing is sent. A zero is a count of zero and is sent."
+  },
+  {
+   "fieldname": "variance",
+   "fieldtype": "Float",
+   "label": "Variance",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Counted less on hand. Blank on a blind count."
+  },
+  {
+   "fieldname": "qty_damaged",
+   "fieldtype": "Float",
+   "label": "Qty damaged",
+   "read_only": 1
+  },
+  {
+   "fieldname": "damaged_entered",
+   "fieldtype": "Check",
+   "label": "Damaged entered",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "intacct_line",
+   "fieldtype": "Data",
+   "label": "Intacct line",
+   "read_only": 1,
+   "hidden": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-22 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse Count Import Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": []
+}

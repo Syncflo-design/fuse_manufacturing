@@ -530,6 +530,8 @@ ROLE_PERMISSIONS = {
 	# code instead.
 	"Fuse Stock Transfer": _FULL,
 	"Fuse Bin Transfer": _FULL,
+	# Cancel is granted with the rest and refused by the document itself, with the reason.
+	"Fuse Count Import": _FULL,
 	# Intacct owns these. Read is needed to raise the documents above; write is not, and an
 	# edit would be overwritten by the next masters sync anyway.
 	"Item": _READ_ONLY,

@@ -99,6 +99,14 @@ MODULES = [
 		"default": 0,
 	},
 	{
+		# Off unless asked for. It needs Intacct's cycle counts in use, and a client who
+		# counts some other way would be offered a screen with nothing to load into.
+		"key": "stock_count",
+		"label": "Stock Count",
+		"description": "Load a counted Intacct cycle count worksheet back into Intacct, instead of keying each line. The count itself is created, started and reconciled in Intacct.",
+		"default": 0,
+	},
+	{
 		"key": "stock_control",
 		"label": "Stock Control",
 		"description": "Transfers, production and stock reports.",
@@ -138,6 +146,7 @@ MODULE_DOCTYPES = {
 	# why item_transfer appears in MODULE_PURPOSES below as well.
 	"item_transfer": ["Fuse Stock Transfer"],
 	"bin_transfer": ["Fuse Bin Transfer"],
+	"stock_count": ["Fuse Count Import"],
 	# Quality does not gate a movement document — it gates whether a movement is allowed
 	# to happen without a passing inspection. What the switch withdraws is the ability to
 	# record one at all.

@@ -5,7 +5,8 @@ description = "Sage Intacct integration for ERPNext — masters in, stock postin
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = []
+# pyxlsb reads the count worksheet in the .xlsb format Intacct downloads it in.
+dependencies = ["pyxlsb>=1.0.10"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

@@ -1,0 +1,209 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-09-22 09:00:00.000000",
+ "description": "Load a counted Intacct cycle count worksheet back into Intacct. The count is created, started and reconciled in Intacct; this writes the counted quantities onto its lines. Load the first count, check the variances in Intacct, recount, then load the recount sheet - blank lines on it leave the first count alone.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "sheet",
+  "company",
+  "column_break_head",
+  "count_id",
+  "count_description",
+  "warehouse",
+  "count_state",
+  "summary_section",
+  "lines_in_count",
+  "column_break_summary_1",
+  "lines_counted",
+  "column_break_summary_2",
+  "lines_blank",
+  "lines_section",
+  "lines",
+  "result_section",
+  "sent_on",
+  "column_break_result",
+  "lines_sent"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "FUSE-CNT-.YYYY.-",
+   "default": "FUSE-CNT-.YYYY.-",
+   "reqd": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "sheet",
+   "fieldtype": "Attach",
+   "label": "Count worksheet",
+   "reqd": 1,
+   "description": "The worksheet downloaded from the count in Intacct, with Qty counted filled in. .xlsb as Intacct gives it, or saved as .xlsx or .csv. Save to check it against Intacct; submit to send it."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "count_id",
+   "fieldtype": "Data",
+   "label": "Intacct count",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Read from the worksheet's header."
+  },
+  {
+   "fieldname": "count_description",
+   "fieldtype": "Data",
+   "label": "Description",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Data",
+   "label": "Intacct warehouse",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "count_state",
+   "fieldtype": "Data",
+   "label": "Count status in Intacct",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "This sheet"
+  },
+  {
+   "fieldname": "lines_in_count",
+   "fieldtype": "Int",
+   "label": "Lines on the count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_summary_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lines_counted",
+   "fieldtype": "Int",
+   "label": "Counted on this sheet",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_summary_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lines_blank",
+   "fieldtype": "Int",
+   "label": "Left blank - not sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lines_section",
+   "fieldtype": "Section Break",
+   "label": "Lines"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Fuse Count Import Line",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Sent to Intacct"
+  },
+  {
+   "fieldname": "sent_on",
+   "fieldtype": "Datetime",
+   "label": "Sent on",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lines_sent",
+   "fieldtype": "Int",
+   "label": "Lines sent",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-09-22 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuse Manufacturing",
+ "name": "Fuse Count Import",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "count_id,warehouse",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "count_id",
+ "track_changes": 1
+}

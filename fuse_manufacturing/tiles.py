@@ -69,6 +69,19 @@ def get_tiles():
 		}
 	)
 
+	tiles.append(
+		{
+			# Opens the list, not a new form: the recount is loaded against the same count
+			# as the first sheet, and the earlier import is what someone looks for first.
+			"key": "stock_count",
+			"label": "Stock Count",
+			"blurb": "Load a counted Intacct worksheet",
+			"icon": "🔢",
+			"route": ["List", "Fuse Count Import"],
+			"roles": TRANSFER_ROLES,
+		}
+	)
+
 	return tiles
 
 
