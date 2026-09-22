@@ -78,6 +78,9 @@ def get_tiles():
 			"blurb": "Load a counted Intacct worksheet",
 			"icon": "🔢",
 			"route": ["List", "Fuse Count Import"],
+			# On the reference row beside BOMs: a count happens a few times a year, and the
+			# main row is for what people do every day.
+			"group": "reference",
 			"roles": TRANSFER_ROLES,
 		}
 	)

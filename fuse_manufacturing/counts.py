@@ -386,13 +386,14 @@ def send(lines, company, reference, stamp):
 	"""
 	functions = []
 	for line in lines:
-		update = ET.Element("update")
-		entry = ET.SubElement(update, "ICCYCLECOUNTENTRY")
+		# execute_many takes <function> elements and stamps each with its control ID.
+		function = ET.Element("function")
+		entry = ET.SubElement(ET.SubElement(function, "update"), "ICCYCLECOUNTENTRY")
 		ET.SubElement(entry, "RECORDNO").text = cstr(line.intacct_line)
 		ET.SubElement(entry, "QUANTITYCOUNTED").text = _format(line.qty_counted)
 		if line.damaged_entered:
 			ET.SubElement(entry, "QUANTITYDAMAGED").text = _format(line.qty_damaged)
-		functions.append(update)
+		functions.append(function)
 
 	for start in range(0, len(functions), BATCH):
 		gateway.execute_many(
