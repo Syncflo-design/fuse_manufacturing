@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disassemble — Fuse</title>
+<style>
+:root {
+	--ink: #14202a;
+	--soft: #55636e;
+	--faint: #8a949d;
+	--rule: #e3e7ea;
+	--ground: #ffffff;
+	--panel: #f6f8f9;
+	--accent: #1a7a4c;
+	--accent-soft: #e8f3ed;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #e8edf1;
+		--soft: #a9b4bd;
+		--faint: #7c868f;
+		--rule: #2b3640;
+		--ground: #141a20;
+		--panel: #1b232b;
+		--accent: #4cc088;
+		--accent-soft: #16302380;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	padding: 0 24px 96px;
+	background: var(--ground);
+	color: var(--ink);
+	font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; }
+header.guide {
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 40px 0 20px;
+	border-bottom: 2px solid var(--ink);
+}
+header.guide .eyebrow {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--accent);
+	margin: 0 0 6px;
+}
+header.guide h1 { font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+header.guide .standfirst { color: var(--soft); margin: 8px 0 0; }
+h2 {
+	font-size: 1.25rem;
+	margin: 2.4rem 0 .6rem;
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--rule);
+	text-wrap: balance;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; text-wrap: balance; }
+p, li { color: var(--soft); }
+li { margin: .25rem 0; }
+strong { color: var(--ink); font-weight: 600; }
+ol, ul { padding-left: 1.3rem; }
+code {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: .08em .35em;
+	font-size: .88em;
+	color: var(--ink);
+}
+.table-scroll { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td {
+	text-align: left;
+	padding: .5rem .7rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: top;
+	color: var(--soft);
+}
+th { color: var(--ink); font-weight: 600; background: var(--panel); }
+blockquote {
+	margin: 1.2rem 0;
+	padding: .7rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: 0 6px 6px 0;
+}
+blockquote p { margin: .3rem 0; }
+figure.shot {
+	margin: 1.4rem 0;
+	padding: 1.6rem 1rem;
+	border: 1px dashed var(--rule);
+	border-radius: 8px;
+	background: var(--panel);
+	text-align: center;
+}
+figure.shot .label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+figure.shot .what { display: block; margin-top: .3rem; color: var(--faint); font-size: .9rem; }
+/* A real screenshot, rather than the gap where one is going. Solid border instead of the
+   dashed one, and no inner padding — the picture is the content, not something sitting
+   inside a placeholder. */
+figure.shot--image {
+	padding: 0;
+	border: 1px solid var(--rule);
+	background: var(--ground);
+	overflow: hidden;
+}
+figure.shot--image img { display: block; width: 100%; height: auto; }
+figure.shot--image figcaption {
+	padding: .5rem .8rem;
+	border-top: 1px solid var(--rule);
+	background: var(--panel);
+	color: var(--faint);
+	font-size: .85rem;
+	text-align: left;
+}
+footer.guide {
+	max-width: 46rem;
+	margin: 3rem auto 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
+	color: var(--faint);
+	font-size: .85rem;
+}
+@media print {
+	body { padding: 0; }
+	figure.shot { break-inside: avoid; }
+	h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="guide">
+	<p class="eyebrow">Fuse user guide 19</p>
+	<h1>Disassemble</h1>
+	<p class="standfirst">Breaking a finished item back into its components — Fuse Manufacturing user guide 19</p>
+</header>
+<main>
+<blockquote>
+<p>This guide covers <strong>taking a finished item apart</strong> and putting its components back into
+stock. Recording production in the first place is covered in <strong>Works Orders - Recording
+Production</strong>, which also describes this job briefly as part of the works order cycle.</p>
+</blockquote>
+<h2>Before you start</h2>
+<h3>What disassembling is</h3>
+<p>A finished item exists in stock, and you are breaking it up. The item leaves stock, and the
+components it was made from come back in.</p>
+<p>Both halves reach Sage Intacct as a single operation, so an item that has left stock and
+become nothing is not possible.</p>
+<p>You might do this because an item was built in error, because stock is being reworked,
+because a customer cancelled and the parts are worth more than the assembly, or because
+components are needed urgently and the quickest source is something already made.</p>
+<h3>This is not the same as cancelling a run</h3>
+<p>They look similar and they are not interchangeable.</p>
+<p><strong>Cancelling a Manufacture entry</strong> undoes one specific production run and puts the works
+order back where it was. Use it when you are correcting something you have just recorded.</p>
+<p><strong>A Disassemble entry</strong> is a fresh transaction against stock on hand. There is no run being
+undone and no works order involved. Use it when you are breaking up stock.</p>
+<p>If you are fixing a run you recorded this morning, cancel it. If you are taking apart stock
+that has been sitting in the store for six months, disassemble it.</p>
+<h3>Where the components come from</h3>
+<p>From the <strong>BOM</strong> — the same recipe the item is made by. You choose the item's BOM and how
+many you are taking apart, and Fuse works out the components and quantities from it,
+exactly as it does for a production run.</p>
+<p>BOMs come from Sage Intacct as kits. You never type a recipe in Fuse and you cannot change
+one here.</p>
+<p>If you happen to know which works order the item originally came from, you can record it,
+but it is optional and it changes nothing.</p>
+<h3>Before you record anything</h3>
+<ul>
+<li>Know which item you are taking apart, how many, and which warehouse they are in.</li>
+<li>Know which warehouse the components are going into.</li>
+<li>Know what you actually recovered — not what the recipe says you should have.</li>
+<li>For lot or serial tracked items, have the lot or serial numbers to hand.</li>
+</ul>
+<figure class="shot shot--image"><img alt="Fuse Home — Stock Control is where stock entries live" src="images/wo/run-09.png" /><figcaption>Fuse Home — Stock Control is where stock entries live</figcaption></figure>
+<h2>Recording a disassembly</h2>
+<h3>Step 1 — Open a new stock entry</h3>
+<ol>
+<li>On Fuse Home, click <strong>Stock Control</strong>, then <strong>Stock Entry</strong>.</li>
+<li>Add a new one.</li>
+<li>Set <strong>Stock Entry Type</strong> to <strong>Disassemble</strong>.</li>
+</ol>
+<figure class="shot shot--image"><img alt="A new stock entry with the type set to Disassemble" src="images/wo/run-10.png" /><figcaption>A new stock entry with the type set to Disassemble</figcaption></figure>
+<h3>Step 2 — Build it from the BOM</h3>
+<ol>
+<li>Open <strong>BOM Info</strong> and tick <strong>From BOM</strong>.</li>
+<li>Under <strong>Default Warehouse</strong>, set the <strong>Default Target Warehouse</strong> — where the components
+   are going. Every component row picks it up.</li>
+<li>Choose the <strong>BOM</strong> of the item you are breaking up.</li>
+<li>Enter the <strong>Finished Good Quantity</strong> — how many you are taking apart.</li>
+<li>Click <strong>Get Items</strong>.</li>
+</ol>
+<p>The components are listed coming in, and the <strong>last row</strong> is the item itself, going out.</p>
+<h3>Step 3 — Say where the item is coming from</h3>
+<p>On that last row, set the <strong>Source Warehouse</strong> — where the item is being taken from.</p>
+<p>This is the one warehouse the screen does not fill in for you, and the entry cannot be
+submitted without it.</p>
+<h3>Step 4 — Bring in the rates</h3>
+<p>Click <strong>Update Rate and Availability</strong>. Until you do, every rate reads R 0.00, and an entry
+with no rates is refused when it posts.</p>
+<figure class="shot shot--image"><img alt="A Disassemble entry built from the BOM" src="images/wo/run-07.png" /><figcaption>A Disassemble entry built from the BOM</figcaption></figure>
+<h3>Step 5 — Correct what actually came back</h3>
+<p>What the BOM says the item contains and what you actually recover are not always the same.
+Something may be damaged, contaminated, or simply not worth keeping.</p>
+<p>Correct it on the entry, and it applies to this entry only:</p>
+<ul>
+<li><strong>Change a quantity</strong> if less came back than the recipe says.</li>
+<li><strong>Remove a row</strong> — set it to zero or delete it — if a component was not recovered at all.</li>
+<li><strong>Add a row</strong> if something came out that the recipe does not list.</li>
+</ul>
+<p>The master BOM is untouched. Nothing you do here changes the recipe for anyone else.</p>
+<blockquote>
+<p><strong>One item per entry</strong>
+Exactly one row leaves stock on a Disassemble entry. If you are taking apart two
+different items, record them as two entries — Fuse has one item's cost to break up per
+entry, not two.</p>
+</blockquote>
+<h3>Step 6 — Submit</h3>
+<ol>
+<li>Click <strong>Save</strong>. It is a draft; nothing has moved.</li>
+<li>Read the rows once more — the item going out, the components coming in, and the
+   quantities.</li>
+<li>Click <strong>Submit</strong>, and confirm.</li>
+</ol>
+<p>Submitting posts to Intacct first. If Intacct rejects it, the entry does not stand and you
+will see Intacct's own reason on screen.</p>
+<h2>After it is submitted</h2>
+<p>Two documents reach Intacct, in one operation — the same pair a cancelled production run
+uses, because Intacct models it the same way:</p>
+<ul>
+<li><strong>Manufacturing Run Decrease</strong> — the item leaves stock. No cost is sent; Intacct values
+  what leaves at its own costing.</li>
+<li><strong>Manufacturing Backflush Incr</strong> — the components come back in, <strong>carrying a cost</strong>.</li>
+</ul>
+<p>The cost on that second leg is the Fuse rate for each component on the entry: the item's
+own value broken back across the parts it yielded. There is no original production run to
+read a cost from, and that is the point — taking something apart does not need one.</p>
+<p>The item leaves before the components arrive, so the stock never appears in two places at
+once.</p>
+<blockquote>
+<p><strong>Why a zero cost is refused</strong>
+The components-in definition updates cost in Intacct. Sending a zero would overwrite the
+component's real valuation with nothing. If a row has no rate, Fuse refuses the whole
+entry and names the row rather than posting a destructive number. This is almost always
+<strong>Update Rate and Availability</strong> not having been clicked.</p>
+</blockquote>
+<figure class="shot shot--image"><img alt="The submitted entry with its two Intacct keys" src="images/wo/run-08.png" /><figcaption>The submitted entry with its two Intacct keys</figcaption></figure>
+<h2>Common questions</h2>
+<h3>I need to undo one</h3>
+<p>Cancel the Disassemble entry. The components go back out and the item comes back in, at the
+cost of the components — which is a production run, and it posts through the ordinary
+manufacturing pair.</p>
+<p>As everywhere else in Fuse: <strong>cancel, never delete</strong>, and never key an opposite entry by
+hand. A cancellation is recorded in Intacct as its own reversing pair, so both systems agree
+about what happened and when.</p>
+<h3>A row has both a source and a destination warehouse</h3>
+<p>That row reads as a move rather than a disassembly. The item being taken apart has a source
+only; the components have a destination only. Clear the warehouse that should not be there.</p>
+<h3>It says the entry takes apart more than one item</h3>
+<p>Only one row may leave stock. Take the second item apart on its own entry — Fuse has one
+item's cost to break up, not two.</p>
+<h3>It says nothing is taken apart</h3>
+<p>The item's own row is missing its <strong>Source Warehouse</strong>, so nothing is leaving. Set it on the
+last row.</p>
+<h3>It says nothing comes back</h3>
+<p>Every component row has been removed or zeroed. A disassembly has to return the components
+it breaks into.</p>
+<h3>A rate is zero and the entry is refused</h3>
+<p>Click <strong>Update Rate and Availability</strong> and submit again. If a component still has no rate,
+Intacct holds no cost for it — speak to your supervisor rather than typing one in.</p>
+<h3>Not enough stock to take apart</h3>
+<p>The item is not in the source warehouse in the quantity you entered. Check the warehouse is
+right, and check the quantity on hand under <strong>Stock Control</strong>.</p>
+<h3>It will not let me submit — posting is switched off</h3>
+<p>The entry is refused rather than saved. Nothing may move stock without Intacct seeing it,
+so an administrator switches posting back on before you record anything.</p>
+<h3>No Intacct definition is mapped</h3>
+<p>Fuse does not know which Intacct document to create. An administrator sets this under
+Transactions in Intacct Settings.</p>
+</main>
+<footer class="guide">Fuse Manufacturing — Syncflo. Printed from the Guides page.</footer>
+</body>
+</html>
