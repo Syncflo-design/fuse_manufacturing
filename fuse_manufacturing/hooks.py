@@ -38,6 +38,10 @@ app_include_js = "/assets/fuse_manufacturing/js/fuse_quality.js"
 doctype_js = {"BOM": "public/js/bom_locked.js"}
 doctype_list_js = {"BOM": "public/js/bom_locked.js"}
 
+# Whether BOMs come from Intacct here, for bom_locked.js. Worked out on the server so a
+# login without access to Intacct Settings is not shown a permission error. See boot.py.
+extend_bootinfo = "fuse_manufacturing.boot.extend"
+
 doc_events = {
 	"Stock Entry": {
 		# Material Receipt and Material Issue are refused: Fuse posts movements, not

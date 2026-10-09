@@ -2,26 +2,12 @@
 // there to press. The server refuses the insert regardless — this is so nobody meets that
 // refusal by accident and thinks the system is broken.
 //
-// The setting is read once and cached on frappe.boot, because both the form and the list
-// need it and neither should cost a round trip on every render.
+// The answer comes from the server on frappe.boot (boot.py). Reading Intacct Settings from
+// here needs a permission most logins do not have, and Frappe showed the refusal as an
+// error on every BOM list and form before any catch could hide it.
 
 function fuse_boms_locked(then) {
-	if (frappe.boot.fuse_boms_from_intacct !== undefined) {
-		then(frappe.boot.fuse_boms_from_intacct);
-		return;
-	}
-	frappe.db
-		.get_single_value("Intacct Settings", "boms_from_intacct")
-		.then(function (value) {
-			frappe.boot.fuse_boms_from_intacct = !!value;
-			then(frappe.boot.fuse_boms_from_intacct);
-		})
-		.catch(function () {
-			// No settings, or no permission to read them: leave ERPNext as it is rather
-			// than hiding a button on a guess.
-			frappe.boot.fuse_boms_from_intacct = false;
-			then(false);
-		});
+	then(!!frappe.boot.fuse_boms_from_intacct);
 }
 
 frappe.ui.form.on("BOM", {
