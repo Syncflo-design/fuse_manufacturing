@@ -371,6 +371,8 @@ def submit_manufacture(work_order, qty, rows, inspection=None):
 		for line in entry.items:
 			if line.get("is_finished_item"):
 				quality.create_for_line(doc=entry, row=line, captured=inspection)
+		# Submitting the inspection stamped the entry; submit a fresh copy, not the stale one.
+		entry.reload()
 
 	entry.submit()
 

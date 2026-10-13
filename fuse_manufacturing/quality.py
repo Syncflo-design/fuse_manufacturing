@@ -162,6 +162,12 @@ def check_inspections(doc, method=None):
 	if not _module_on():
 		return
 
+	# The submit is what is gated, not the draft. A Quality Inspection names the document it
+	# belongs to, so that document has to be saved first — refusing the draft made every
+	# inspected line impossible to record at all.
+	if doc.docstatus != 1:
+		return
+
 	reference_type = doc.doctype
 	if reference_type not in INSPECTION_POINTS:
 		return
@@ -256,11 +262,14 @@ def create_for_line(*, doc, row, captured):
 				"min_value": parameter.min_value,
 				"max_value": parameter.max_value,
 			}
+			# ERPNext judges a measurement on reading_1 against the limits, and a check on
+			# reading_value against the expected value. The other way round, every result is
+			# read as blank and the inspection rejects itself.
 			if taken not in (None, ""):
 				if parameter.numeric:
-					line["reading_value"] = taken
-				else:
 					line["reading_1"] = taken
+				else:
+					line["reading_value"] = taken
 			inspection.append("readings", line)
 
 	# Accepted or not is the screen's call, because the person holding the sample is the
@@ -293,6 +302,10 @@ def attach_inspections(doc, rows_by_key, key_field):
 		if not captured:
 			continue
 		created.append(create_for_line(doc=doc, row=row, captured=captured))
+	if created:
+		# Submitting an inspection stamps the document it belongs to, so the copy in hand is
+		# now stale and its submit would be refused as modified by someone else.
+		doc.reload()
 	return created
 
 
