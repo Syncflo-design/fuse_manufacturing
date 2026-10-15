@@ -380,6 +380,32 @@ def instruments(instrument_type=None):
 
 
 @frappe.whitelist()
+def work_order_certificates(work_order):
+	"""The inspections recorded on a works order's runs, newest first.
+
+	A run's inspection hangs off its Manufacture stock entry, not the works order, so the
+	works order cannot show it by itself. This is what lets the works order offer the
+	Certificate of Analysis in one click.
+	"""
+	frappe.has_permission("Work Order", doc=work_order, throw=True)
+
+	entries = frappe.get_all(
+		"Stock Entry",
+		filters={"work_order": work_order, "purpose": "Manufacture", "docstatus": 1},
+		pluck="name",
+	)
+	if not entries:
+		return []
+
+	return frappe.get_all(
+		"Quality Inspection",
+		filters={"reference_type": "Stock Entry", "reference_name": ("in", entries), "docstatus": 1},
+		fields=["name", "batch_no", "status", "report_date"],
+		order_by="creation desc",
+	)
+
+
+@frappe.whitelist()
 def calibration_due(days=30):
 	"""Instruments falling due, so calibration is arranged before it stops production.
 

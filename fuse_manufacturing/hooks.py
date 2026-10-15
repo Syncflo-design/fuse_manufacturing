@@ -35,7 +35,7 @@ after_migrate = "fuse_manufacturing.install.after_install"
 # different ways would produce four different records.
 app_include_js = "/assets/fuse_manufacturing/js/fuse_quality.js"
 
-doctype_js = {"BOM": "public/js/bom_locked.js"}
+doctype_js = {"BOM": "public/js/bom_locked.js", "Work Order": "public/js/work_order_certificate.js"}
 doctype_list_js = {"BOM": "public/js/bom_locked.js"}
 
 # Whether BOMs come from Intacct here, for bom_locked.js. Worked out on the server so a
