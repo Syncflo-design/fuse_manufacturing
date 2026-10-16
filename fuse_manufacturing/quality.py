@@ -145,6 +145,20 @@ def _required_for(row, reference_type):
 	return bool(flags.inspection_required_before_delivery) and bool(row.get("is_finished_item"))
 
 
+def flag_inspection_required(doc, method=None):
+	"""Tick Inspection Required on a stock entry whose made item is inspected.
+
+	ERPNext offers Create > Quality Inspection on a stock entry only once that box is
+	ticked, while check_inspections below already knows the line needs one. Left alone, the
+	operator is told to record an inspection the form will not let them start, and has to
+	tick a box to obey a rule the system set. The item decides; the box follows it.
+	"""
+	if doc.get("inspection_required") or not _module_on():
+		return
+	if any(_required_for(row, "Stock Entry") for row in doc.get("items") or []):
+		doc.inspection_required = 1
+
+
 def check_inspections(doc, method=None):
 	"""Refuse a movement whose lines have not been inspected, and say which.
 

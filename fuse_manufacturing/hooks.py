@@ -51,6 +51,9 @@ doc_events = {
 			# A switched-off module refuses its own movements. Permissions cannot separate
 			# them: all three raise a Stock Entry and only the purpose tells them apart.
 			"fuse_manufacturing.postings.block_inactive_module",
+			# An inspected product ticks Inspection Required itself, so the form offers the
+			# inspection instead of only refusing for the lack of one.
+			"fuse_manufacturing.quality.flag_inspection_required",
 			# 8.5.1: a batch that has not passed its own check does not move on.
 			"fuse_manufacturing.quality.check_inspections",
 		],
