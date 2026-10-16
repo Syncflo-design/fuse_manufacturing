@@ -159,6 +159,58 @@ def flag_inspection_required(doc, method=None):
 		doc.inspection_required = 1
 
 
+# The status an inspection carries until its readings are in. Added to ERPNext's own options
+# by install.PENDING_OPTIONS.
+PENDING = "Pending"
+
+
+def _captured(reading):
+	"""Whether anything was recorded on this reading line."""
+	if reading.get("numeric"):
+		return any(str(reading.get(f"reading_{i}") or "").strip() for i in range(1, 11))
+	return bool(str(reading.get("reading_value") or "").strip())
+
+
+def mark_pending(doc, method=None):
+	"""Pending, not Rejected, until the readings are in.
+
+	ERPNext judges an empty reading as a failed one, so an inspection opened from a stock
+	entry reads Rejected before anyone has measured anything, which tells the operator the
+	batch failed when nobody has looked at it. A line with nothing recorded is Pending. The
+	inspection is Rejected only when a reading that WAS taken is out of tolerance, Pending
+	while anything is still to be measured, and Accepted when everything is in and passes.
+	A manual inspection is the inspector's own call and is left alone.
+	"""
+	readings = doc.get("readings") or []
+	if doc.get("manual_inspection") or not readings or doc.status == "Cancelled":
+		return
+
+	for reading in readings:
+		if not _captured(reading):
+			reading.status = PENDING
+
+	if any(reading.status == "Rejected" for reading in readings):
+		doc.status = "Rejected"
+	elif any(reading.status == PENDING for reading in readings):
+		doc.status = PENDING
+	else:
+		doc.status = "Accepted"
+
+
+def block_pending_submit(doc, method=None):
+	"""An inspection with readings still to take cannot be submitted."""
+	if doc.get("manual_inspection"):
+		return
+	missing = [reading.specification for reading in doc.get("readings") or [] if not _captured(reading)]
+	if missing:
+		frappe.throw(
+			"These readings have not been taken yet:<br><br>"
+			+ "<br>".join(missing)
+			+ "<br><br>Enter them, then submit.",
+			title="Inspection not finished",
+		)
+
+
 def check_inspections(doc, method=None):
 	"""Refuse a movement whose lines have not been inspected, and say which.
 

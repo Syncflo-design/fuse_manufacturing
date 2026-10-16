@@ -101,7 +101,10 @@ doc_events = {
 		"validate": [
 			"fuse_manufacturing.quality.block_uncalibrated_instrument",
 			"fuse_manufacturing.quality.require_release_authority",
+			# Pending until the readings are taken; Rejected only for a reading that fails.
+			"fuse_manufacturing.quality.mark_pending",
 		],
+		"before_submit": "fuse_manufacturing.quality.block_pending_submit",
 	},
 	# Recipes are Intacct kits on a site configured that way, so a BOM built by hand is a
 	# second recipe Intacct has never heard of. Refused at insert; the New button is also

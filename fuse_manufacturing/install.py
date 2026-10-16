@@ -7,6 +7,14 @@ later sync or posting can find it again without guessing from the name.
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+
+# An inspection reads Pending until its readings are taken (quality.mark_pending). Pending is
+# put in front of ERPNext's own options, which are kept exactly as shipped.
+PENDING_OPTIONS = {
+	"Quality Inspection": "\nPending\nAccepted\nRejected\nCancelled",
+	"Quality Inspection Reading": "\nPending\nAccepted\nRejected",
+}
 
 CUSTOM_FIELDS = {
 	"Item": [
@@ -675,6 +683,9 @@ def after_install():
 	means a support ticket.
 	"""
 	created = create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
+
+	for doctype, options in PENDING_OPTIONS.items():
+		make_property_setter(doctype, "status", "options", options, "Text", validate_fields_for_doctype=False)
 
 	if not frappe.db.exists("Role", ROLE):
 		frappe.get_doc(
